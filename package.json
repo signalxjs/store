@@ -47,5 +47,6 @@
     "homepage": "https://github.com/signalxjs/store",
     "bugs": {
         "url": "https://github.com/signalxjs/store/issues"
-    }
+    },
+    "packageManager": "pnpm@10.28.2"
 }

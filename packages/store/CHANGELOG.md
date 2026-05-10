@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-05-10
+
+### Changed
+
+- First release published via GitHub Actions with npm provenance attestation. Functionally identical to `0.4.2`.
+
 ## [0.4.2] - 2026-05-10
 
 ### Changed

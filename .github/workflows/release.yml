@@ -27,11 +27,14 @@ jobs:
 
       - uses: pnpm/action-setup@v6
 
+      # Per https://docs.npmjs.com/trusted-publishers — never cache the package
+      # manager in release builds: cache poisoning could ship malicious deps
+      # that npm then signs a provenance attestation over.
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-          cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
 
       # npm trusted publishing needs npm >= 11.5.1. Node 24 ships npm 11.x,
       # but pin to latest so we never silently fall behind a publish-side fix.

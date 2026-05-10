@@ -1,0 +1,48 @@
+{
+    "name": "@sigx/store",
+    "version": "0.4.2",
+    "description": "Store framework for SignalX - State management abstraction",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/index.js",
+            "types": "./dist/index.d.ts"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsgo",
+        "dev": "tsgo --watch"
+    },
+    "keywords": [
+        "sigx",
+        "store",
+        "state-management",
+        "reactive"
+    ],
+    "author": "Andreas Ekdahl",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/signalxjs/store.git",
+        "directory": "packages/store"
+    },
+    "homepage": "https://github.com/signalxjs/store",
+    "bugs": {
+        "url": "https://github.com/signalxjs/store/issues"
+    },
+    "dependencies": {
+        "@sigx/runtime-core": "^0.4.1",
+        "@sigx/reactivity": "^0.4.1"
+    },
+    "devDependencies": {
+        "typescript": "^5.9.3"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

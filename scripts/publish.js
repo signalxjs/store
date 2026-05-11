@@ -32,6 +32,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 
 // Packages in dependency order (dependencies first).
+// Other SignalX packages (router, store, ssg, daisyui, runtime-terminal, etc.)
+// live in their own repos under https://github.com/signalxjs and are published
+// from there.
 const PACKAGES = [
     'packages/store',
 ];

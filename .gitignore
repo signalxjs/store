@@ -6,14 +6,17 @@ node_modules/
 # Build outputs
 dist/
 build/
+docs/dist/
 *.d.ts
 *.d.ts.map
+!packages/runtime-core/src/jsx-types.d.ts
+*.js
 *.js.map
 
-# Keep config + script JS
+# Keep specific JS files
 !vite.config.js
 !*.config.js
-!packages/*/scripts/*.js
+!examples/*.js
 !scripts/*.js
 
 # TypeScript cache
@@ -33,12 +36,17 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
-# Editor
+# Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 *.sw?
 
 # Testing

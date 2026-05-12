@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-05-12
+
+### Changed
+
+- Bump `@sigx/reactivity` and `@sigx/runtime-core` dependency ranges to `^0.4.3` and rebuild against core `0.4.3`. Picks up the upstream fixes shipped in core `0.4.2` and `0.4.3`. No store API changes.
+
 ## [0.4.3] - 2026-05-10
 
 ### Changed

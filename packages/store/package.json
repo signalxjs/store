@@ -1,6 +1,6 @@
 {
     "name": "@sigx/store",
-    "version": "0.4.3",
+    "version": "0.4.4",
     "description": "Store framework for SignalX - State management abstraction",
     "type": "module",
     "main": "./dist/index.js",
@@ -36,8 +36,8 @@
         "url": "https://github.com/signalxjs/store/issues"
     },
     "dependencies": {
-        "@sigx/runtime-core": "^0.4.1",
-        "@sigx/reactivity": "^0.4.1"
+        "@sigx/runtime-core": "^0.4.3",
+        "@sigx/reactivity": "^0.4.3"
     },
     "devDependencies": {
         "typescript": "^5.9.3"

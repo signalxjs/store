@@ -1,0 +1,7 @@
+[
+  {
+    "name": "@sigx/store",
+    "path": "packages/store/dist/index.js",
+    "limit": "10 KB"
+  }
+]

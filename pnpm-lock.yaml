@@ -39,11 +39,11 @@ importers:
   packages/store:
     dependencies:
       '@sigx/reactivity':
-        specifier: ^0.4.3
-        version: 0.4.3
+        specifier: ^0.4.8
+        version: 0.4.8
       '@sigx/runtime-core':
-        specifier: ^0.4.3
-        version: 0.4.3
+        specifier: ^0.4.8
+        version: 0.4.8
     devDependencies:
       typescript:
         specifier: ^6.0.3
@@ -476,12 +476,12 @@ packages:
   '@rolldown/pluginutils@1.0.0-rc.18':
     resolution: {integrity: sha512-CUY5Mnhe64xQBGZEEXQ5WyZwsc1JU3vAZLIxtrsBt3LO6UOb+C8GunVKqe9sT8NeWb4lqSaoJtp2xo6GxT1MNw==}
 
-  '@sigx/reactivity@0.4.3':
-    resolution: {integrity: sha512-S6nCZuwRGsPSvGrLXLxRSJzVFIPdWAIbSu4gKAglNxuq5V3A2aH9SdHE/wSqz0lTzA4qrIRR2wSbi3bnOMjKOg==}
+  '@sigx/reactivity@0.4.8':
+    resolution: {integrity: sha512-vby9frU9+ttHWWHhP6FBa5LRNg+waEa69v7B0vd7vkMkYRtPGyBPz5FswhkNT54davXpHObRcXI0fdv9gDUhNw==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@sigx/runtime-core@0.4.3':
-    resolution: {integrity: sha512-KVvlFFMzhl0xFhE4p1Liy0R2LPebDS3ckWk8I6kplbw/t6kb4Jsr0k19Hy7IoWhfZ84yD1EhvAHDyXvIU1wmOQ==}
+  '@sigx/runtime-core@0.4.8':
+    resolution: {integrity: sha512-BpzEl4EPYQomz2Ws94MD/CB+H92bfr5hqMZbNBPpnpq9LbzT5av4mt7Usz8wc2juuPKpssSzQ9rGHZjKnMhAhg==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   '@size-limit/esbuild@11.2.0':
@@ -1231,11 +1231,11 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.0-rc.18': {}
 
-  '@sigx/reactivity@0.4.3': {}
+  '@sigx/reactivity@0.4.8': {}
 
-  '@sigx/runtime-core@0.4.3':
+  '@sigx/runtime-core@0.4.8':
     dependencies:
-      '@sigx/reactivity': 0.4.3
+      '@sigx/reactivity': 0.4.8
 
   '@size-limit/esbuild@11.2.0(size-limit@11.2.0)':
     dependencies:

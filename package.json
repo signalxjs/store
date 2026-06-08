@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "wt": "node scripts/worktree.mjs",
     "build": "pnpm -r run build",
     "test": "vitest run",
     "test:watch": "vitest",

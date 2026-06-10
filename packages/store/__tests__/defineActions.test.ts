@@ -25,6 +25,54 @@ function createActionStore<TActions extends Record<string, (...args: any[]) => a
     };
 }
 
+// Red tests for signalxjs/store#20: these pin the CORRECT semantics and fail
+// against the current implementation (promise published as result, missing
+// async catch, swallowed sync errors). The redesign must turn them green.
+describe('action event semantics (#20)', () => {
+    it('onDispatched receives the RESOLVED value of an async action, not the promise', async () => {
+        const store = createActionStore({
+            fetchData: async () => 'data',
+        });
+
+        const results: unknown[] = [];
+        store.actions.onDispatched.fetchData.subscribe((result: unknown) => {
+            results.push(result);
+        });
+
+        await store.actions.fetchData();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(results).toEqual(['data']);
+    });
+
+    it('onFailure fires when an async action rejects', async () => {
+        const failure = vi.fn();
+        const store = createActionStore({
+            fetchData: async () => {
+                throw new Error('network down');
+            },
+        });
+
+        store.actions.onFailure.fetchData.subscribe(failure);
+
+        await store.actions.fetchData()?.catch?.(() => { /* observed */ });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(failure).toHaveBeenCalled();
+        expect(failure.mock.calls[0][0]).toBeInstanceOf(Error);
+    });
+
+    it('sync action errors propagate to the caller', () => {
+        const store = createActionStore({
+            failing: () => {
+                throw new Error('boom');
+            },
+        });
+
+        expect(() => store.actions.failing()).toThrow('boom');
+    });
+});
+
 describe('defineActions', () => {
     it('actions are callable functions', () => {
         const store = createActionStore({

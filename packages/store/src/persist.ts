@@ -144,6 +144,12 @@ export function persist<TState extends object>(
     };
 
     const applyPersisted = (raw: string | null) => {
+        // The store may be disposed before async hydration resolves — never
+        // patch or start watchers on a dead store.
+        if (disposed) {
+            isHydrated = true;
+            return;
+        }
         // One corrupted storage entry (bad JSON, throwing migrate, throwing
         // patch) must not brick store creation — fall back to defaults,
         // still mark hydrated, and start saving (the next write self-heals

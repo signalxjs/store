@@ -147,6 +147,26 @@ describe('persist — failure isolation', () => {
         errorSpy.mockRestore();
     });
 
+    it('disposing the store before async hydration resolves prevents the late patch', async () => {
+        let release!: (value: string | null) => void;
+        const gate = new Promise<string | null>(resolve => {
+            release = resolve;
+        });
+        const storage = {
+            getItem: vi.fn(() => gate),
+            setItem: vi.fn(),
+        };
+
+        const { store } = createPersistedStore({ count: 0 }, { key: 'k', storage });
+        store.$dispose();
+
+        release(JSON.stringify({ v: 1, data: { count: 42 } }));
+        await store.handle.whenHydrated;
+
+        expect(store.count).toBe(0); // late hydration did not patch a dead store
+        expect(storage.setItem).not.toHaveBeenCalled();
+    });
+
     it('a synchronously throwing getItem falls back to defaults and still hydrates', () => {
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const storage = createSyncStorage();

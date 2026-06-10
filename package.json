@@ -51,7 +51,7 @@
     "type": "git",
     "url": "git+https://github.com/signalxjs/store.git"
   },
-  "homepage": "https://github.com/signalxjs/store",
+  "homepage": "https://sigx.dev/store/",
   "bugs": {
     "url": "https://github.com/signalxjs/store/issues"
   },

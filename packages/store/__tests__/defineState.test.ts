@@ -2,163 +2,237 @@ import { describe, it, expect, vi } from 'vitest';
 import { defineStore } from '../src/store';
 
 /**
- * Helper to create a store with state for testing.
- * Each call creates a unique factory to avoid singleton conflicts.
+ * Helper to create a store exposing the raw defineState pieces for testing.
+ * Each call creates a unique factory (and store name) so instance counters
+ * and scoped-lifetime fallbacks never collide between tests.
  */
 let storeCounter = 0;
 function createStateStore<T extends object>(initialState: T) {
     const name = `stateTest_${++storeCounter}`;
     const useStore = defineStore(name, (ctx) => {
-        const { state, events, mutate } = ctx.defineState(initialState);
-        return { state, events, mutate } as any;
+        const { state, signals, events, patch } = ctx.defineState(initialState);
+        return { state, signals, events, patch };
     });
-    return useStore() as {
+    return useStore() as unknown as {
         state: T;
-        events: any;
-        mutate: { [K in keyof T]: (value: T[K] | ((prev: T[K]) => T[K])) => void };
-        dispose: () => void;
-        name: string;
+        signals: { [K in keyof T]-?: { value: T[K] } };
+        events: {
+            [K in keyof T]-?: {
+                subscribe(fn: (value: T[K], prev: T[K] | undefined) => void): { unsubscribe(): void };
+            };
+        };
+        patch: {
+            (partial: Partial<T>): void;
+            (mutator: (state: T) => void): void;
+        };
     };
 }
 
 describe('defineState', () => {
-    it('returns state, events, and mutate objects', () => {
+    it('returns state, signals, events, and patch', () => {
         const store = createStateStore({ count: 0, label: 'hello' });
         expect(store.state).toBeDefined();
+        expect(store.signals).toBeDefined();
         expect(store.events).toBeDefined();
-        expect(store.mutate).toBeDefined();
+        expect(typeof store.patch).toBe('function');
     });
 
-    it('state is reactive (signal-based)', () => {
+    it('state is reactive and mutable directly', () => {
         const store = createStateStore({ count: 0 });
         expect(store.state.count).toBe(0);
-        store.state.count = 10 as any;
+        store.state.count = 10;
         expect(store.state.count).toBe(10);
     });
 
-    it('state properties can be read and written directly', () => {
-        const store = createStateStore({ name: 'Alice', age: 30 });
-        expect(store.state.name).toBe('Alice');
-        expect(store.state.age).toBe(30);
+    it('signals read and write through to the state', () => {
+        const store = createStateStore({ count: 0, label: 'a' });
 
-        store.state.name = 'Bob' as any;
-        store.state.age = 25 as any;
-        expect(store.state.name).toBe('Bob');
-        expect(store.state.age).toBe(25);
+        expect(store.signals.count.value).toBe(0);
+        expect(store.signals.label.value).toBe('a');
+
+        store.signals.count.value = 7;
+        expect(store.state.count).toBe(7);
+
+        store.state.label = 'b';
+        expect(store.signals.label.value).toBe('b');
     });
 
-    it('mutate[key](value) updates the state property', () => {
-        const store = createStateStore({ count: 0, text: 'hello' });
-
-        store.mutate.count(42);
-        expect(store.state.count).toBe(42);
-
-        store.mutate.text('world' as any);
-        expect(store.state.text).toBe('world');
-    });
-
-    it('mutate[key](fn) calls the function with current value and updates', () => {
-        const store = createStateStore({ count: 10 });
-
-        store.mutate.count(((prev: number) => prev + 5) as any);
-        expect(store.state.count).toBe(15);
-
-        store.mutate.count(((prev: number) => prev * 2) as any);
-        expect(store.state.count).toBe(30);
-    });
-
-    it('mutate catches and logs errors from updater functions', () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        const store = createStateStore({ count: 0 });
-
-        store.mutate.count((() => {
-            throw new Error('updater error');
-        }) as any);
-
-        expect(consoleSpy).toHaveBeenCalled();
-        expect(store.state.count).toBe(0); // state unchanged
-        consoleSpy.mockRestore();
-    });
-
-    it('each state property has an onMutated{Key} event', () => {
-        const store = createStateStore({ count: 0, name: 'test' });
-
-        expect(store.events.onMutatedCount).toBeDefined();
-        expect(typeof store.events.onMutatedCount.subscribe).toBe('function');
-        expect(store.events.onMutatedName).toBeDefined();
-        expect(typeof store.events.onMutatedName.subscribe).toBe('function');
-    });
-
-    it('mutation events fire when state changes via mutate', () => {
+    it('writing through a key signal fires the key event', () => {
         const store = createStateStore({ count: 0 });
         const spy = vi.fn();
-        store.events.onMutatedCount.subscribe(spy);
+        store.events.count.subscribe(spy);
 
-        store.mutate.count(5);
-        expect(spy).toHaveBeenCalledWith(5);
+        store.signals.count.value = 3;
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(3, 0);
     });
+});
 
-    it('mutation events fire when state changes via direct assignment', () => {
+describe('per-key events (lazy refCount)', () => {
+    it('subscribing does not fire immediately', () => {
         const store = createStateStore({ count: 0 });
         const spy = vi.fn();
-        store.events.onMutatedCount.subscribe(spy);
-
-        store.state.count = 7 as any;
-        expect(spy).toHaveBeenCalledWith(7);
+        store.events.count.subscribe(spy);
+        expect(spy).not.toHaveBeenCalled();
     });
 
-    it('event subscribers receive the new value', () => {
-        const store = createStateStore({ text: 'initial' });
-        const values: string[] = [];
+    it('mutations before any subscriber emit nothing — the watcher does not exist yet', () => {
+        const store = createStateStore({ count: 0 });
+        const spy = vi.fn();
 
-        store.events.onMutatedText.subscribe((val: string) => {
-            values.push(val);
-        });
+        // Nobody is listening: this mutation is not recorded anywhere.
+        store.state.count = 5;
 
-        store.mutate.text('first' as any);
-        store.mutate.text('second' as any);
+        store.events.count.subscribe(spy);
+        expect(spy).not.toHaveBeenCalled();
 
-        expect(values).toContain('first');
-        expect(values).toContain('second');
+        store.state.count = 6;
+        expect(spy).toHaveBeenCalledTimes(1);
+        // prev is 5 (the value when the watcher STARTED at first subscribe),
+        // not 0 — proof that no watcher existed before the first subscriber.
+        expect(spy).toHaveBeenCalledWith(6, 5);
     });
 
-    it('multiple subscribers on the same event all get notified', () => {
+    it('fires with (value, prev) for primitive keys', () => {
+        const store = createStateStore({ count: 0, label: 'a' });
+        const countSpy = vi.fn();
+        const labelSpy = vi.fn();
+        store.events.count.subscribe(countSpy);
+        store.events.label.subscribe(labelSpy);
+
+        store.state.count = 1;
+        expect(countSpy).toHaveBeenCalledWith(1, 0);
+        expect(labelSpy).not.toHaveBeenCalled();
+
+        store.state.label = 'b';
+        expect(labelSpy).toHaveBeenCalledWith('b', 'a');
+        expect(countSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('deep object mutation fires the key event', () => {
+        const store = createStateStore({ user: { name: 'Alice', tags: ['a'] } });
+        const spy = vi.fn();
+        store.events.user.subscribe(spy);
+
+        store.state.user.name = 'Bob';
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        const [value, prev] = spy.mock.calls[0];
+        expect(value.name).toBe('Bob');
+        // The deep watcher observes the SAME live object: value and prev are
+        // the same reference (prev is pinned to the current object, not a
+        // pre-mutation snapshot).
+        expect(prev).toBe(value);
+    });
+
+    it('multiple subscribers on one key each receive events', () => {
         const store = createStateStore({ count: 0 });
         const spy1 = vi.fn();
         const spy2 = vi.fn();
+        const sub1 = store.events.count.subscribe(spy1);
+        store.events.count.subscribe(spy2);
 
-        store.events.onMutatedCount.subscribe(spy1);
-        store.events.onMutatedCount.subscribe(spy2);
+        store.state.count = 1;
+        expect(spy1).toHaveBeenCalledWith(1, 0);
+        expect(spy2).toHaveBeenCalledWith(1, 0);
 
-        store.mutate.count(99);
-        expect(spy1).toHaveBeenCalledWith(99);
-        expect(spy2).toHaveBeenCalledWith(99);
+        // Unsubscribing one subscriber leaves the other active.
+        sub1.unsubscribe();
+        store.state.count = 2;
+        expect(spy1).toHaveBeenCalledTimes(1);
+        expect(spy2).toHaveBeenCalledTimes(2);
+        expect(spy2).toHaveBeenLastCalledWith(2, 1);
     });
 
-    it('deep watch triggers events on nested object changes', () => {
-        const store = createStateStore({ user: { name: 'Alice', age: 30 } });
-        const spy = vi.fn();
-        store.events.onMutatedUser.subscribe(spy);
-
-        store.state.user.name = 'Bob' as any;
-
-        expect(spy).toHaveBeenCalled();
-        const receivedUser = spy.mock.calls[spy.mock.calls.length - 1][0];
-        expect(receivedUser.name).toBe('Bob');
-    });
-
-    it('unsubscribing from an event prevents further notifications', () => {
+    it('unsubscribe stops events', () => {
         const store = createStateStore({ count: 0 });
         const spy = vi.fn();
-        const sub = store.events.onMutatedCount.subscribe(spy);
+        const sub = store.events.count.subscribe(spy);
 
-        store.mutate.count(1);
+        store.state.count = 1;
         expect(spy).toHaveBeenCalledTimes(1);
 
         sub.unsubscribe();
-        spy.mockClear();
+        store.state.count = 2;
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
 
-        store.mutate.count(2);
-        expect(spy).not.toHaveBeenCalled();
+    it('the watcher stops after the last unsubscribe and restarts on resubscribe', () => {
+        const store = createStateStore({ count: 0 });
+        const spy = vi.fn();
+        const sub = store.events.count.subscribe(spy);
+
+        store.state.count = 1;
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        sub.unsubscribe();
+        store.state.count = 2;
+        // Watcher stopped with the last subscriber — nothing recorded.
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        const spy2 = vi.fn();
+        store.events.count.subscribe(spy2);
+        expect(spy2).not.toHaveBeenCalled();
+
+        store.state.count = 3;
+        expect(spy2).toHaveBeenCalledTimes(1);
+        // prev is 2 (the value when the watcher restarted), proving the
+        // watcher was actually gone while nobody was subscribed.
+        expect(spy2).toHaveBeenCalledWith(3, 2);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('patch', () => {
+    it('patch(partial) updates multiple keys', () => {
+        const store = createStateStore({ a: 0, b: 0, c: 'x' });
+        store.patch({ a: 1, b: 2 });
+        expect(store.state.a).toBe(1);
+        expect(store.state.b).toBe(2);
+        expect(store.state.c).toBe('x');
+    });
+
+    it('patch(partial) is atomic — each key event fires exactly once with the final value', () => {
+        const store = createStateStore({ a: 0, b: 0 });
+        const spyA = vi.fn();
+        const spyB = vi.fn();
+        store.events.a.subscribe(spyA);
+        store.events.b.subscribe(spyB);
+
+        store.patch({ a: 1, b: 2 });
+
+        expect(spyA).toHaveBeenCalledTimes(1);
+        expect(spyA).toHaveBeenCalledWith(1, 0);
+        expect(spyB).toHaveBeenCalledTimes(1);
+        expect(spyB).toHaveBeenCalledWith(2, 0);
+    });
+
+    it('patch(mutator) batches multiple writes to one key into a single event', () => {
+        const store = createStateStore({ a: 0 });
+        const spy = vi.fn();
+        store.events.a.subscribe(spy);
+
+        store.patch(s => {
+            s.a = 1;
+            s.a = 2;
+        });
+
+        expect(store.state.a).toBe(2);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(2, 0);
+    });
+
+    it('patch(mutator) errors propagate and writes before the throw persist', () => {
+        const store = createStateStore({ a: 0, b: 0 });
+
+        expect(() =>
+            store.patch(s => {
+                s.a = 1;
+                throw new Error('patch boom');
+            })
+        ).toThrow('patch boom');
+
+        expect(store.state.a).toBe(1);
+        expect(store.state.b).toBe(0);
     });
 });

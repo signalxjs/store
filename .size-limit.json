@@ -3,5 +3,10 @@
     "name": "@sigx/store",
     "path": "packages/store/dist/index.js",
     "limit": "10 KB"
+  },
+  {
+    "name": "@sigx/store/persist",
+    "path": "packages/store/dist/persist.js",
+    "limit": "4 KB"
   }
 ]

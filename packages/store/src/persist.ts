@@ -12,7 +12,7 @@ export interface StorageLike {
 }
 
 export interface PersistOptions<TState extends object> {
-    /** Storage key. Defaults to the store's logical name — pass one explicitly when persisting multiple slices. */
+    /** Storage key. Defaults to `sigx:<storeName>` (the logical store name) — pass one explicitly when persisting multiple slices. */
     key?: string;
     /** Defaults to globalThis.localStorage. Absent storage (SSR) → persist is a no-op and `hydrated` is immediately true. */
     storage?: StorageLike;

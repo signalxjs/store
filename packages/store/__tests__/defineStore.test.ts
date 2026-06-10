@@ -141,6 +141,33 @@ describe('accessor-returned key signals (#21 review)', () => {
         });
         expect(store.count).toBe(6);
     });
+
+    it('storeToSignals includes accessor-returned key signals and computeds', () => {
+        const useStore = defineStore(nextName(), (ctx) => {
+            const { state, signals } = ctx.defineState({ count: 1 });
+            const doubled = computed(() => state.count * 2);
+            return {
+                get count() {
+                    return signals.count;
+                },
+                get doubled() {
+                    return doubled;
+                }
+            };
+        });
+        const store = useStore();
+
+        const views = storeToSignals(store) as {
+            count: { value: number };
+            doubled: { readonly value: number };
+        };
+        expect(views.count.value).toBe(1);
+        expect(views.doubled.value).toBe(2);
+
+        views.count.value = 3;
+        expect(store.count).toBe(3);
+        expect(views.doubled.value).toBe(6);
+    });
 });
 
 describe('setup parameters (tuple-typed)', () => {

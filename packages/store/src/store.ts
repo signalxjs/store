@@ -272,17 +272,27 @@ function makeActions<TActions extends Record<string, (...args: any[]) => any>>(
                 // pending; the ORIGINAL promise is returned so the caller
                 // still observes rejection, while this handled side chain
                 // prevents unhandled-rejection noise for fire-and-forget.
+                // Handler bodies are guarded too: a synchronously-throwing
+                // reactive effect on `pending` must not poison the chain.
                 returned.then(
                     resolved => {
-                        inflight.count--;
-                        if (dispatched.hasSubscribers) {
-                            dispatched.publish({ result: resolved, args });
+                        try {
+                            inflight.count--;
+                            if (dispatched.hasSubscribers) {
+                                dispatched.publish({ result: resolved, args });
+                            }
+                        } catch (err) {
+                            console.error(`[@sigx/store] ${storeId}: error settling action "${actionName}":`, err);
                         }
                     },
                     err => {
-                        inflight.count--;
-                        if (failure.hasSubscribers) {
-                            failure.publish({ error: err, args });
+                        try {
+                            inflight.count--;
+                            if (failure.hasSubscribers) {
+                                failure.publish({ error: err, args });
+                            }
+                        } catch (settleErr) {
+                            console.error(`[@sigx/store] ${storeId}: error settling action "${actionName}":`, settleErr);
                         }
                     }
                 );
@@ -579,8 +589,10 @@ export function storeToSignals<TReturn extends object>(store: { readonly [StoreS
     const result: Record<string, unknown> = {};
     const descriptors = Object.getOwnPropertyDescriptors(internals.target);
     for (const [key, descriptor] of Object.entries(descriptors)) {
-        if (!('value' in descriptor)) continue;
-        const value = descriptor.value;
+        // Accessor-returned signals/computeds count too (same contract as
+        // the store's lazy $patch/$events resolution) — evaluating the
+        // getter once here is how we find out what it yields.
+        const value = 'value' in descriptor ? descriptor.value : Reflect.get(internals.target, key);
         if (isKeySignal(value)) {
             result[key] = value;
         } else if (isComputed(value)) {

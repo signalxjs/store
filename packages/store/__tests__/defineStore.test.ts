@@ -115,6 +115,49 @@ describe('flat store surface', () => {
     });
 });
 
+describe('accessor-returned key signals (#21 review)', () => {
+    it('a key signal returned via an accessor still works with $patch and $events', () => {
+        const useStore = defineStore(nextName(), (ctx) => {
+            const { signals } = ctx.defineState({ count: 0 });
+            return {
+                get count() {
+                    return signals.count;
+                }
+            };
+        });
+        const store = useStore();
+
+        expect(store.count).toBe(0);
+
+        const spy = vi.fn();
+        store.$events.count.subscribe(spy);
+
+        store.$patch({ count: 5 });
+        expect(store.count).toBe(5);
+        expect(spy).toHaveBeenCalledWith(5, 0);
+
+        store.$patch((draft: { count: number }) => {
+            draft.count = 6;
+        });
+        expect(store.count).toBe(6);
+    });
+});
+
+describe('setup parameters (tuple-typed)', () => {
+    it('preserves inference beyond three setup parameters', () => {
+        const useStore = defineStore(
+            nextName(),
+            (ctx, a: number, b: string, c: boolean, d: number[]) => {
+                const { signals } = ctx.defineState({ summary: `${a}-${b}-${c}-${d.length}` });
+                return { ...signals };
+            },
+            'transient'
+        );
+        const store = useStore(1, 'two', true, [4, 5]);
+        expect(store.summary).toBe('1-two-true-2');
+    });
+});
+
 describe('store meta', () => {
     it('$id has the name#N format', () => {
         const name = nextName();

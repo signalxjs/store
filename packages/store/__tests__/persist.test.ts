@@ -167,6 +167,28 @@ describe('persist — failure isolation', () => {
         expect(storage.setItem).not.toHaveBeenCalled();
     });
 
+    it('a throwing localStorage ACCESSOR (Safari private mode) means no storage, not a crash', () => {
+        const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+        Object.defineProperty(globalThis, 'localStorage', {
+            configurable: true,
+            get() {
+                throw new Error('SecurityError: blocked');
+            }
+        });
+
+        try {
+            const { store } = createPersistedStore({ count: 7 }); // no storage option → default lookup
+            expect(store.count).toBe(7);
+            expect(store.handle.hydrated.value).toBe(true);
+        } finally {
+            if (original) {
+                Object.defineProperty(globalThis, 'localStorage', original);
+            } else {
+                delete (globalThis as Record<string, unknown>).localStorage;
+            }
+        }
+    });
+
     it('a synchronously throwing getItem falls back to defaults and still hydrates', () => {
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const storage = createSyncStorage();

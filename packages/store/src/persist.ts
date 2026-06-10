@@ -73,10 +73,17 @@ export function persist<TState extends object>(
     options: PersistOptions<TState> = {}
 ): PersistHandle {
     const { state, patch } = slice;
-    const storage = options.storage
-        ?? (typeof globalThis !== 'undefined' && 'localStorage' in globalThis
-            ? (globalThis as { localStorage?: StorageLike }).localStorage
-            : undefined);
+    let defaultStorage: StorageLike | undefined;
+    if (!options.storage && typeof globalThis !== 'undefined' && 'localStorage' in globalThis) {
+        // Merely ACCESSING localStorage can throw (Safari private mode,
+        // blocked storage) — treat that as "no storage available".
+        try {
+            defaultStorage = (globalThis as { localStorage?: StorageLike }).localStorage;
+        } catch {
+            defaultStorage = undefined;
+        }
+    }
+    const storage = options.storage ?? defaultStorage;
     // Keyed by the LOGICAL store name (not the instance id) so persistence
     // survives across instances. With 'transient' stores sharing one key,
     // instances will fight over it — pass explicit keys there.

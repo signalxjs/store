@@ -348,22 +348,40 @@ function buildStoreProxy(target: Record<string | symbol, unknown>, id: string): 
         }
     }
 
-    let eventsCache: Record<string, StateKeyEvent<unknown>> | null = null;
-    const getEvents = () => {
-        if (!eventsCache) {
-            eventsCache = {};
-            for (const [key, mapping] of publicKeys) {
-                eventsCache[key] = mapping.slice.events[mapping.sourceKey];
+    // Key signals returned via accessors (e.g. `get todos() { return signals.todos }`)
+    // aren't visible as data properties — resolve them lazily on first
+    // $patch/$events access so runtime behavior matches the type contract.
+    const resolveKey = (key: string) => {
+        let mapping = publicKeys.get(key);
+        if (!mapping) {
+            const value = Reflect.get(target, key);
+            if (isKeySignal(value)) {
+                mapping = { slice: value[KeySlice], sourceKey: value[KeyName] };
+                publicKeys.set(key, mapping);
             }
         }
-        return eventsCache;
+        return mapping;
     };
+
+    const events = new Proxy({} as Record<string, StateKeyEvent<unknown>>, {
+        get(_t, key) {
+            if (typeof key !== 'string') return undefined;
+            const mapping = resolveKey(key);
+            return mapping ? mapping.slice.events[mapping.sourceKey] : undefined;
+        },
+        has: (_t, key) => typeof key === 'string' && resolveKey(key) !== undefined,
+        ownKeys: () => Array.from(publicKeys.keys()),
+        getOwnPropertyDescriptor: (_t, key) =>
+            typeof key === 'string' && resolveKey(key)
+                ? { enumerable: true, configurable: true }
+                : undefined
+    });
 
     // Draft for the $patch function form: reads/writes route to slices.
     const publicDraft = new Proxy({} as Record<string, unknown>, {
         get(_t, key) {
             if (typeof key !== 'string') return undefined;
-            const mapping = publicKeys.get(key);
+            const mapping = resolveKey(key);
             if (!mapping) {
                 throw new Error(`[@sigx/store] ${id}: $patch draft has no state key "${key}".`);
             }
@@ -371,17 +389,17 @@ function buildStoreProxy(target: Record<string | symbol, unknown>, id: string): 
         },
         set(_t, key, value) {
             if (typeof key !== 'string') return false;
-            const mapping = publicKeys.get(key);
+            const mapping = resolveKey(key);
             if (!mapping) {
                 throw new Error(`[@sigx/store] ${id}: $patch draft has no state key "${key}".`);
             }
             mapping.slice.state[mapping.sourceKey] = value;
             return true;
         },
-        has: (_t, key) => typeof key === 'string' && publicKeys.has(key),
+        has: (_t, key) => typeof key === 'string' && resolveKey(key) !== undefined,
         ownKeys: () => Array.from(publicKeys.keys()),
         getOwnPropertyDescriptor: (_t, key) =>
-            typeof key === 'string' && publicKeys.has(key)
+            typeof key === 'string' && resolveKey(key)
                 ? { enumerable: true, configurable: true, writable: true, value: undefined }
                 : undefined
     });
@@ -392,7 +410,7 @@ function buildStoreProxy(target: Record<string | symbol, unknown>, id: string): 
                 update(publicDraft);
             } else {
                 for (const [key, value] of Object.entries(update)) {
-                    const mapping = publicKeys.get(key);
+                    const mapping = resolveKey(key);
                     if (!mapping) {
                         throw new Error(`[@sigx/store] ${id}: $patch received unknown state key "${key}".`);
                     }
@@ -407,7 +425,7 @@ function buildStoreProxy(target: Record<string | symbol, unknown>, id: string): 
             switch (key) {
                 case '$id': return id;
                 case '$patch': return $patch;
-                case '$events': return getEvents();
+                case '$events': return events;
                 case '$dispose': return () => (t as { dispose?: () => void }).dispose?.();
             }
             const value = Reflect.get(t, key, receiver);
@@ -468,26 +486,15 @@ export function onStoreCreated(plugin: (ctx: StorePluginContext) => void): Subsc
 
 const instanceCounters = new Map<string, number>();
 
-export function defineStore<TReturn extends object>(
+/**
+ * Tuple-typed setup parameters: any arity is preserved with full inference
+ * (no fixed overload ceiling).
+ */
+export function defineStore<TReturn extends object, TArgs extends unknown[] = []>(
     name: string,
-    setup: (ctx: SetupStoreContext) => TReturn,
+    setup: (ctx: SetupStoreContext, ...args: TArgs) => TReturn,
     lifetime?: Lifetime
-): () => UnwrapStore<TReturn>;
-export function defineStore<TReturn extends object, T1>(
-    name: string,
-    setup: (ctx: SetupStoreContext, param1: T1) => TReturn,
-    lifetime?: Lifetime
-): (param1: T1) => UnwrapStore<TReturn>;
-export function defineStore<TReturn extends object, T1, T2>(
-    name: string,
-    setup: (ctx: SetupStoreContext, param1: T1, param2: T2) => TReturn,
-    lifetime?: Lifetime
-): (param1: T1, param2: T2) => UnwrapStore<TReturn>;
-export function defineStore<TReturn extends object, T1, T2, T3>(
-    name: string,
-    setup: (ctx: SetupStoreContext, param1: T1, param2: T2, param3: T3) => TReturn,
-    lifetime?: Lifetime
-): (param1: T1, param2: T2, param3: T3) => UnwrapStore<TReturn>;
+): (...args: TArgs) => UnwrapStore<TReturn>;
 export function defineStore<TReturn extends object>(
     name: string,
     setup: (ctx: SetupStoreContext, ...args: any[]) => TReturn,

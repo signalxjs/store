@@ -65,6 +65,111 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+describe('persist — failure isolation', () => {
+    it('a rejecting async setItem is caught and logged, not an unhandled rejection', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const storage = createAsyncStorage();
+        storage.setItem.mockImplementation(async () => {
+            throw new Error('quota exceeded');
+        });
+
+        const { store } = createPersistedStore({ count: 0 }, { key: 'k', storage });
+        await store.handle.whenHydrated;
+
+        store.count = 1; // triggers a write that rejects
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('write failed'),
+            expect.any(Error)
+        );
+        expect(store.count).toBe(1); // store keeps working from memory
+        errorSpy.mockRestore();
+    });
+
+    it('a synchronously throwing setItem is caught and logged', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const storage = createSyncStorage();
+        storage.setItem.mockImplementation(() => {
+            throw new Error('blocked');
+        });
+
+        const { store } = createPersistedStore({ count: 0 }, { key: 'k', storage });
+        expect(() => {
+            store.count = 1;
+        }).not.toThrow();
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('write failed'),
+            expect.any(Error)
+        );
+        errorSpy.mockRestore();
+    });
+
+    it('corrupted persisted data falls back to defaults and still hydrates', () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const storage = createSyncStorage({ k: 'not-json{{{' });
+
+        const { store } = createPersistedStore({ count: 7 }, { key: 'k', storage });
+
+        expect(store.count).toBe(7); // defaults retained
+        expect(store.handle.hydrated.value).toBe(true);
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('hydration failed'),
+            expect.any(Error)
+        );
+
+        // saving still starts: the next write self-heals the entry
+        store.count = 8;
+        expect(storage.data.get('k')).toBe(JSON.stringify({ v: 1, data: { count: 8 } }));
+        errorSpy.mockRestore();
+    });
+
+    it('a throwing migrate falls back to defaults and still hydrates', () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const storage = createSyncStorage({
+            k: JSON.stringify({ v: 1, data: { count: 42 } }),
+        });
+
+        const { store } = createPersistedStore(
+            { count: 7 },
+            {
+                key: 'k',
+                storage,
+                version: 2,
+                migrate: () => {
+                    throw new Error('bad migration');
+                },
+            }
+        );
+
+        expect(store.count).toBe(7);
+        expect(store.handle.hydrated.value).toBe(true);
+        errorSpy.mockRestore();
+    });
+
+    it('a synchronously throwing getItem falls back to defaults and still hydrates', () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const storage = createSyncStorage();
+        storage.getItem.mockImplementation(() => {
+            throw new Error('privacy mode');
+        });
+
+        const { store } = createPersistedStore({ count: 7 }, { key: 'k', storage });
+
+        expect(store.count).toBe(7);
+        expect(store.handle.hydrated.value).toBe(true);
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('storage read failed'),
+            expect.any(Error)
+        );
+
+        // saving still starts after the failed read
+        store.count = 8;
+        expect(storage.setItem).toHaveBeenCalled();
+        errorSpy.mockRestore();
+    });
+});
+
 describe('persist — hydration', () => {
     it('hydrates synchronously from sync storage via one atomic patch (one event per key)', async () => {
         const storage = createSyncStorage({

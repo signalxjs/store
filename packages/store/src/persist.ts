@@ -113,7 +113,19 @@ export function persist<TState extends object>(
 
     const write = () => {
         if (disposed || !isHydrated) return;
-        void storage.setItem(key, serialize(snapshot()));
+        // Persistence failures (quota, privacy modes, broken async stores)
+        // must never crash the app or surface as unhandled rejections — the
+        // store keeps working from memory.
+        try {
+            const result = storage.setItem(key, serialize(snapshot())) as Promise<void> | void;
+            if (result && typeof result.then === 'function') {
+                result.catch(err => {
+                    console.error(`[@sigx/store] persist("${key}"): write failed:`, err);
+                });
+            }
+        } catch (err) {
+            console.error(`[@sigx/store] persist("${key}"): write failed:`, err);
+        }
     };
 
     const scheduleWrite = () => {
@@ -132,40 +144,58 @@ export function persist<TState extends object>(
     };
 
     const applyPersisted = (raw: string | null) => {
-        if (raw !== null) {
-            const payload = deserialize(raw);
-            let data: Partial<TState>;
-            const envelope = payload as Envelope | null;
-            const persistedVersion = envelope && typeof envelope === 'object' && typeof envelope.v === 'number' ? envelope.v : 0;
-            const persistedData = envelope && typeof envelope === 'object' && 'data' in envelope ? envelope.data : payload;
-            if (persistedVersion !== version && options.migrate) {
-                data = options.migrate(persistedData, persistedVersion);
-            } else {
-                data = persistedData as Partial<TState>;
-            }
-            if (data && typeof data === 'object') {
-                const filtered: Record<string, unknown> = {};
-                for (const k of pickKeys) {
-                    if (k in (data as Record<string, unknown>)) {
-                        filtered[k] = (data as Record<string, unknown>)[k];
-                    }
+        // One corrupted storage entry (bad JSON, throwing migrate, throwing
+        // patch) must not brick store creation — fall back to defaults,
+        // still mark hydrated, and start saving (the next write self-heals
+        // the stored entry).
+        try {
+            if (raw !== null) {
+                const payload = deserialize(raw);
+                let data: Partial<TState>;
+                const envelope = payload as Envelope | null;
+                const persistedVersion = envelope && typeof envelope === 'object' && typeof envelope.v === 'number' ? envelope.v : 0;
+                const persistedData = envelope && typeof envelope === 'object' && 'data' in envelope ? envelope.data : payload;
+                if (persistedVersion !== version && options.migrate) {
+                    data = options.migrate(persistedData, persistedVersion);
+                } else {
+                    data = persistedData as Partial<TState>;
                 }
-                patch(filtered as Partial<TState>);
+                if (data && typeof data === 'object') {
+                    const filtered: Record<string, unknown> = {};
+                    for (const k of pickKeys) {
+                        if (k in (data as Record<string, unknown>)) {
+                            filtered[k] = (data as Record<string, unknown>)[k];
+                        }
+                    }
+                    patch(filtered as Partial<TState>);
+                }
             }
+        } catch (err) {
+            console.error(`[@sigx/store] persist("${key}"): hydration failed, continuing with defaults:`, err);
         }
         isHydrated = true;
         startSaving();
     };
 
-    const initial = storage.getItem(key);
-    const whenHydrated = typeof (initial as Promise<string | null> | null)?.then === 'function'
+    // getItem can throw synchronously (privacy modes, quota errors) — treat
+    // it like any other failed read: defaults, hydrated, saving started.
+    let initial: string | null | Promise<string | null> = null;
+    let readFailed = false;
+    try {
+        initial = storage.getItem(key);
+    } catch (err) {
+        console.error(`[@sigx/store] persist("${key}"): storage read failed, continuing with defaults:`, err);
+        readFailed = true;
+    }
+
+    const whenHydrated = !readFailed && typeof (initial as Promise<string | null> | null)?.then === 'function'
         ? (initial as Promise<string | null>).then(applyPersisted, err => {
             // A broken storage read must not block the app on defaults forever.
             console.error(`[@sigx/store] persist("${key}"): hydration failed:`, err);
             isHydrated = true;
             startSaving();
         })
-        : (applyPersisted(initial as string | null), Promise.resolve());
+        : (applyPersisted(readFailed ? null : initial as string | null), Promise.resolve());
 
     ctx.onDeactivated(() => {
         disposed = true;

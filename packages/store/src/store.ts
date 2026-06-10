@@ -1,298 +1,588 @@
-import { guid, Subscription, Topic, InstanceLifetimes } from "@sigx/runtime-core";
-import { createTopic, toSubscriber, Utils, defineFactory, SetupFactoryContext } from "@sigx/runtime-core";
-import { signal, watch, effectScope, EffectScope } from "@sigx/reactivity";
+import {
+    createTopic,
+    createTopicGroup,
+    defineFactory,
+    type Lifetime,
+    type SetupFactoryContext,
+    type Subscription,
+    type Topic
+} from "@sigx/runtime-core";
+import { batch, signal, watch, type Computed, type WatchHandle, isComputed } from "@sigx/reactivity";
 
-type MutateFn<T> = (value: T | ((prev: T) => T)) => void;
+// ============================================================================
+// Branding & internal wiring symbols
+// ============================================================================
 
-type StoreStateContext<TState extends object, TInternalState extends object> = {
-    state: TState;
-    internalState: TInternalState;
+/** Runtime brand for key signals (also drives UnwrapStore at the type level). */
+const KeySignalBrand = Symbol('sigx:keySignal');
+/** Phantom type carrier so storeToSignals can infer TReturn from a store. */
+declare const StoreShape: unique symbol;
+/** Internal: the slice a key signal reads/writes. */
+const KeySlice = Symbol('sigx:keySlice');
+/** Internal: the source key inside that slice. */
+const KeyName = Symbol('sigx:keyName');
+/** Internal: store proxy → internals, for storeToSignals. */
+const storeInternals = new WeakMap<object, StoreInternals>();
+
+// ============================================================================
+// Public types
+// ============================================================================
+
+/**
+ * A signal-shaped, spreadable view over one state key. Spread the `signals`
+ * from defineState into your setup return to make those keys public state.
+ */
+export type KeySignal<T> = {
+    value: T;
+    readonly [KeySignalBrand]: true;
 };
 
-type StoreActionContext<TState extends object, TInternalState extends object, TGetters, TEvents extends Record<string, Topic<any>>, TSetup extends object> = StoreStateContext<TState, TInternalState> & {
-    get: TGetters;
-    mutate: {
-        [K in keyof TState]: MutateFn<TState[K]>;
-    };
-    events: TEvents;
-    setup: TSetup;
+export type StateKeyEvent<T> = {
+    subscribe(fn: (value: T, prev: T | undefined) => void): Subscription;
 };
 
-export type StoreEvents<TState extends object, TEvents extends Record<string, Topic<any>> = {}> = {
-    [K in keyof TState as `onMutated${Capitalize<string & K>}`]: ReturnType<typeof toSubscriber<TState[K]>>;
+export type Patch<TState extends object> = {
+    (partial: Partial<TState>): void;
+    (mutator: (state: TState) => void): void;
+};
 
-} & TEvents;
+/**
+ * A wrapped store action: callable with the exact original signature, plus a
+ * reactive in-flight flag and per-action lifecycle event subscribers.
+ */
+export type StoreAction<F extends (...args: any[]) => any> = F & {
+    /** Reactive: true while any invocation of this action is in flight. */
+    readonly pending: boolean;
+    onDispatching: { subscribe(fn: (...args: Parameters<F>) => void): Subscription };
+    onDispatched: { subscribe(fn: (result: Awaited<ReturnType<F>>, ...args: Parameters<F>) => void): Subscription };
+    onFailure: { subscribe(fn: (error: unknown, ...args: Parameters<F>) => void): Subscription };
+};
 
-type MapActionOnDispatching<T extends Function> = T extends (...args: infer U) => any ? (...args: U) => void : never;
-type MapActionOnDispatched<T extends Function> = T extends (...args: infer U) => Promise<infer Y> | infer Y ? (result: Y, ...args: U) => void : never;
-type MapActionOnFailure<T extends Function> = T extends (...args: infer U) => any ? (failureReason: any, ...args: U) => void : never;
-
-export type StoreReturnDefineAction<TAction extends { [key: string]: any }> = {
-    onDispatching: {
-        [k in keyof TAction]: {
-            subscribe(fn: MapActionOnDispatching<TAction[k]>): Subscription
-        }
-    }
-    onDispatched: {
-        [k in keyof TAction]: {
-            subscribe(fn: MapActionOnDispatched<TAction[k]>): Subscription
-        }
-    }
-    onFailure: {
-        [k in keyof TAction]: {
-            subscribe(fn: MapActionOnFailure<TAction[k]>): Subscription
-        }
-    }
-} & TAction
+export type StoreActions<T extends Record<string, (...args: any[]) => any>> = {
+    [K in keyof T]: StoreAction<T[K]>;
+};
 
 export interface SetupStoreContext extends SetupFactoryContext {
-    defineState<
-        TState extends object,
-        TEvents extends Record<string, Topic<any>> = Record<string, Topic<any>>
-    >(state: TState): {
-        state: TState
-        events: StoreEvents<TState, TEvents>
-        mutate: {
-            [K in keyof TState]: MutateFn<TState[K]>;
-        };
-    }
-    defineActions<TActions extends { [key: string]: any }>(actions: TActions): StoreReturnDefineAction<TActions>
+    /** The logical store name passed to defineStore (e.g. `'todos'`). */
+    readonly storeName: string;
+    /** The friendly instance id (e.g. `'todos#1'`). */
+    readonly instanceId: string;
+    defineState<TState extends object>(state: TState): {
+        /** The deep reactive proxy — mutate freely inside the setup/actions. */
+        state: TState;
+        /** Spreadable per-key signals; the ones you return become public state. */
+        signals: { [K in keyof TState]-?: KeySignal<TState[K]> };
+        /** Per-key change events (lazy: watchers run only while subscribed). */
+        events: { [K in keyof TState]-?: StateKeyEvent<TState[K]> };
+        /** Atomic multi-key update; flushes reactivity once. Errors propagate. */
+        patch: Patch<TState>;
+    };
+    defineActions<TActions extends Record<string, (...args: any[]) => any>>(actions: TActions): StoreActions<TActions>;
+    /** Typed custom events; namespaced `${$id}.events`, destroyed with the store. */
+    defineEvents<EventMap extends Record<string, any>>(): { [K in keyof EventMap]: Topic<EventMap[K]> };
 }
 
-export interface IReturnSetupStore<TState, TGetters, TActions extends { [key: string]: Function }, TEvents> {
-    state?: TState
-    get?: TGetters
-    actions?: StoreReturnDefineAction<TActions>
-    events?: TEvents
-    name?: string
+/** The keys of the setup return that are key signals — the store's public state. */
+export type PublicState<TReturn> = {
+    [K in keyof TReturn as TReturn[K] extends KeySignal<any> ? K : never]:
+        TReturn[K] extends KeySignal<infer V> ? V : never;
+};
+
+export type StoreMeta<TReturn extends object> = {
+    /** Phantom (never set at runtime) — carries the setup return type for inference. */
+    readonly [StoreShape]?: TReturn;
+    /** Friendly instance id, e.g. `'todos#1'`. */
+    readonly $id: string;
+    /** Atomic update across the store's public state keys. */
+    $patch: Patch<PublicState<TReturn>>;
+    /** Per-key change events for the public state keys. */
+    $events: { [K in keyof PublicState<TReturn>]: StateKeyEvent<PublicState<TReturn>[K]> };
+    $dispose(): void;
+};
+
+/**
+ * The flat store surface: key signals read/write as plain values, computeds
+ * read as plain values (read-only), actions/functions/objects pass through,
+ * `$`-meta on the side.
+ */
+export type UnwrapStore<TReturn extends object> =
+    {
+        [K in keyof TReturn as TReturn[K] extends KeySignal<any> ? K : never]:
+            TReturn[K] extends KeySignal<infer V> ? V : never;
+    } &
+    {
+        readonly [K in keyof TReturn as TReturn[K] extends KeySignal<any> ? never
+            : TReturn[K] extends Computed<any> ? K : never]:
+            TReturn[K] extends Computed<infer V> ? V : never;
+    } &
+    {
+        [K in keyof TReturn as TReturn[K] extends KeySignal<any> | Computed<any> ? never : K]: TReturn[K];
+    } &
+    StoreMeta<TReturn>;
+
+export type StorePluginContext = {
+    /** The logical store name passed to defineStore. */
+    name: string;
+    /** The instance id, e.g. `'todos#1'`. */
+    instanceId: string;
+    /** The raw setup return (any shape — duck-type as needed). */
+    instance: object;
+    /** Tie plugin resources to the store instance's lifetime. */
+    onDeactivated(fn: () => void): void;
+};
+
+// ============================================================================
+// Internals
+// ============================================================================
+
+type Slice = {
+    state: Record<string, unknown>;
+    events: Record<string, StateKeyEvent<unknown>>;
+};
+
+type StoreInternals = {
+    id: string;
+    target: Record<string | symbol, unknown>;
+    /** public key (as returned) → owning slice + source key */
+    publicKeys: Map<string, { slice: Slice; sourceKey: string }>;
+};
+
+function isKeySignal(value: unknown): value is KeySignal<unknown> & { [KeySlice]: Slice; [KeyName]: string } {
+    return typeof value === 'object' && value !== null && (value as Record<symbol, unknown>)[KeySignalBrand] === true;
 }
 
-export function defineStore<
-    TState extends object,
-    TGetters extends object,
-    TActions extends { [key: string]: any },
-    TEvents extends Record<string, ReturnType<typeof toSubscriber<any>>>,
-    InferReturnSetup extends IReturnSetupStore<TState, TGetters, TActions, TEvents>>(name: string, setup: (ctx: SetupStoreContext) => InferReturnSetup, lifetime?: InstanceLifetimes): ReturnType<typeof defineFactory<InferReturnSetup>>
-export function defineStore<
-    TState extends object,
-    TGetters extends object,
-    TActions extends { [key: string]: any },
-    TEvents extends Record<string, ReturnType<typeof toSubscriber<any>>>,
-    InferReturnSetup extends IReturnSetupStore<TState, TGetters, TActions, TEvents>, T1>(name: string, setup: (ctx: SetupStoreContext, param1: T1) => InferReturnSetup, lifetime?: InstanceLifetimes): ReturnType<typeof defineFactory<InferReturnSetup, T1>>
-export function defineStore<
-    TState extends object,
-    TGetters extends object,
-    TActions extends { [key: string]: any },
-    TEvents extends Record<string, ReturnType<typeof toSubscriber<any>>>,
-    InferReturnSetup extends IReturnSetupStore<TState, TGetters, TActions, TEvents>, T1, T2>(name: string, setup: (ctx: SetupStoreContext, param1: T1, param2: T2) => InferReturnSetup, lifetime?: InstanceLifetimes): ReturnType<typeof defineFactory<InferReturnSetup, T1, T2>>
-export function defineStore<
-    TState extends object,
-    TGetters extends object,
-    TActions extends { [key: string]: any },
-    TEvents extends Record<string, ReturnType<typeof toSubscriber<any>>>,
-    InferReturnSetup extends IReturnSetupStore<TState, TGetters, TActions, TEvents>, T1, T2, T3>(name: string, setup: (ctx: SetupStoreContext, param1: T1, param2: T2, param3: T3, lifetime?: InstanceLifetimes) => InferReturnSetup): ReturnType<typeof defineFactory<InferReturnSetup, T1, T2, T3>>
-export function defineStore<
-    TState extends object,
-    TGetters extends object,
-    TActions extends { [key: string]: any },
-    TEvents extends Record<string, ReturnType<typeof toSubscriber<any>>>,
-    InferReturnSetup extends IReturnSetupStore<TState, TGetters, TActions, TEvents>, T1, T2, T3, T4>(name: string, setup: (ctx: SetupStoreContext, param1: T1, param2: T2, param3: T3, param4: T4, lifetime?: InstanceLifetimes) => InferReturnSetup): ReturnType<typeof defineFactory<InferReturnSetup, T1, T2, T3, T4>>
-export function defineStore<
-    TState extends object,
-    TGetters extends object,
-    TActions extends { [key: string]: any },
-    TEvents extends Record<string, ReturnType<typeof toSubscriber<any>>>,
-    InferReturnSetup extends IReturnSetupStore<TState, TGetters, TActions, TEvents>, T1, T2, T3, T4, T5>(name: string, setup: (ctx: SetupStoreContext, param1: T1, param2: T2, param3: T3, param4: T4, param5: T5) => InferReturnSetup, lifetime?: InstanceLifetimes): ReturnType<typeof defineFactory<InferReturnSetup, T1, T2, T3, T4, T5>>
-export function defineStore<
-    TState extends object,
-    TGetters extends object,
-    TActions extends { [key: string]: any },
-    TEvents extends Record<string, ReturnType<typeof toSubscriber<any>>>,
-    InferReturnSetup extends IReturnSetupStore<TState, TGetters, TActions, TEvents>
->(name: string, setup: (ctx: SetupStoreContext, ...args: any) => InferReturnSetup, lifetime = InstanceLifetimes.Scoped) {
+function isPromiseLike(value: unknown): value is Promise<unknown> {
+    return typeof (value as { then?: unknown } | null)?.then === 'function';
+}
 
-    return defineFactory<InferReturnSetup>((ctxFactory, ...args: any) => {
-        const scope = effectScope(true);
-        let messages: Topic<any>[] | null = [] satisfies Topic<any>[];
-        const instanceId = guid();
-        const id = `${name}_${instanceId}`;
+// ============================================================================
+// defineState
+// ============================================================================
 
-        const result = setup({
-            ...ctxFactory,
-            defineState: (state) => {
-                return defineState(state, id, scope, messages!);
+function makeState<TState extends object>(
+    initial: TState,
+    storeId: string,
+    topics: Topic<unknown>[]
+) {
+    const state = signal(initial) as TState;
+    const slice: Slice = { state: state as Record<string, unknown>, events: {} };
+    const signals = {} as { [K in keyof TState]-?: KeySignal<TState[K]> };
+
+    for (const key of Object.keys(initial)) {
+        // Topic created eagerly (devtools-discoverable via the registry);
+        // the deep watcher only runs while someone is subscribed (refCount).
+        let handle: WatchHandle | null = null;
+        const topic = createTopic<{ value: unknown; prev: unknown }>({
+            namespace: `${storeId}.state`,
+            name: key,
+            onActivate: () => {
+                handle = watch(
+                    () => (state as Record<string, unknown>)[key],
+                    (value, prev) => topic.publish({ value, prev }),
+                    { deep: true }
+                );
             },
-            defineActions: (actions) => {
-                return defineActions(actions, id, messages!);
+            onDeactivate: () => {
+                handle?.stop();
+                handle = null;
             }
-        }, ...args);
-
-        ctxFactory.onDeactivated(() => {
-            scope.stop();
-            messages?.forEach(m => m.destroy());
-            messages = null;
         });
+        topics.push(topic as Topic<unknown>);
 
-        // add store name for easy debugging
-        if (!result.name) {
-            result.name = id;
-        }
-        return result;
-    }, lifetime);
-}
+        slice.events[key] = {
+            subscribe: (fn: (value: unknown, prev: unknown) => void) =>
+                topic.subscribe(message => fn(message.value, message.prev))
+        };
 
-function defineActions<
-    TAction extends { [key: string]: any }
->(
-    actions: TAction,
-    storeInstanceName: string,
-    messages: Topic<any>[]
-): StoreReturnDefineAction<TAction> {
-    const events: { [key: string]: Topic<any> } = {};
-    const namespace = `${storeInstanceName}.actions.${guid()}`;
+        const keySignal = {
+            get value() {
+                return (state as Record<string, unknown>)[key];
+            },
+            set value(newValue: unknown) {
+                (state as Record<string, unknown>)[key] = newValue;
+            }
+        };
+        Object.defineProperties(keySignal, {
+            [KeySignalBrand]: { value: true },
+            [KeySlice]: { value: slice },
+            [KeyName]: { value: key }
+        });
+        (signals as Record<string, unknown>)[key] = keySignal;
+    }
 
-    const onDispatching: any = {};
-    const onDispatched: any = {};
-    const onFailure: any = {};
-    const result: any = {
-        onDispatching,
-        onDispatched,
-        onFailure
+    const patch: Patch<TState> = (update: Partial<TState> | ((s: TState) => void)) => {
+        batch(() => {
+            if (typeof update === 'function') {
+                update(state);
+            } else {
+                Object.assign(state, update);
+            }
+        });
     };
 
-    function getEvent(actionName: string, type: "onDispatching" | "onDispatched" | "onFailure") {
-        const name = `${actionName}.${type}`;
-        if (!events[name]) {
-            events[name] = createTopic({
-                namespace: namespace,
-                name: name
-            });
-            messages.push(events[name]);
-        }
-        return events[name];
-    }
+    return {
+        state,
+        signals,
+        events: slice.events as { [K in keyof TState]-?: StateKeyEvent<TState[K]> },
+        patch
+    };
+}
 
-    Object.keys(actions).forEach(actionName => {
-        // Setup event subscribers
-        onDispatching[actionName] = {
-            subscribe: (fn: Function) => {
-                return getEvent(actionName, "onDispatching").subscribe(function (this: any) {
-                    fn.apply(this, arguments[0]);
-                });
-            }
-        };
-        onDispatched[actionName] = {
-            subscribe: (fn: Function) => {
-                return getEvent(actionName, "onDispatched").subscribe(function (this: any) {
-                    const msg: { result: any; args: IArguments; } = arguments[0];
-                    const allArguments = [msg.result].concat(Array.from(msg.args));
-                    fn.apply(this, allArguments);
-                });
-            }
-        };
-        onFailure[actionName] = {
-            subscribe: (fn: Function) => {
-                return getEvent(actionName, "onFailure").subscribe(function (this: any) {
-                    const msg: { reason: any; args: IArguments; } = arguments[0];
-                    const allArguments = [msg.reason].concat(Array.from(msg.args));
-                    fn.apply(this, allArguments);
-                });
-            }
-        };
+// ============================================================================
+// defineActions
+// ============================================================================
 
-        // Wrap action
-        result[actionName] = function (this: any) {
+function makeActions<TActions extends Record<string, (...args: any[]) => any>>(
+    actions: TActions,
+    storeId: string,
+    topics: Topic<unknown>[]
+): StoreActions<TActions> {
+    const result = {} as StoreActions<TActions>;
+    const namespace = `${storeId}.actions`;
+
+    for (const actionName of Object.keys(actions) as (keyof TActions & string)[]) {
+        const original = actions[actionName];
+        const inflight = signal({ count: 0 });
+
+        const dispatching = createTopic<unknown[]>({ namespace, name: `${actionName}.onDispatching` });
+        const dispatched = createTopic<{ result: unknown; args: unknown[] }>({ namespace, name: `${actionName}.onDispatched` });
+        const failure = createTopic<{ error: unknown; args: unknown[] }>({ namespace, name: `${actionName}.onFailure` });
+        topics.push(dispatching as Topic<unknown>, dispatched as Topic<unknown>, failure as Topic<unknown>);
+
+        const wrapped = function (this: unknown, ...args: unknown[]) {
+            if (dispatching.hasSubscribers) {
+                dispatching.publish(args);
+            }
+            inflight.count++;
+
+            let returned: unknown;
             try {
-                const currentArguments = arguments;
-                getEvent(actionName, "onDispatching").publish(currentArguments);
-
-                const returnedResult = actions[actionName].apply(this, currentArguments);
-                if (Utils.isPromise(returnedResult)) {
-                    (returnedResult as Promise<any>).then(result => {
-                        getEvent(actionName, "onDispatched").publish({ result: returnedResult, args: currentArguments });
-                    });
+                returned = original.apply(this, args);
+            } catch (err) {
+                inflight.count--;
+                if (failure.hasSubscribers) {
+                    failure.publish({ error: err, args });
                 }
-                else {
-                    getEvent(actionName, "onDispatched").publish({ result: returnedResult, args: currentArguments });
-                }
+                // Errors are the caller's to handle — never swallowed.
+                throw err;
+            }
 
-                return returnedResult;
+            if (isPromiseLike(returned)) {
+                // Side chain: publishes the RESOLVED value and settles
+                // pending; the ORIGINAL promise is returned so the caller
+                // still observes rejection, while this handled side chain
+                // prevents unhandled-rejection noise for fire-and-forget.
+                returned.then(
+                    resolved => {
+                        inflight.count--;
+                        if (dispatched.hasSubscribers) {
+                            dispatched.publish({ result: resolved, args });
+                        }
+                    },
+                    err => {
+                        inflight.count--;
+                        if (failure.hasSubscribers) {
+                            failure.publish({ error: err, args });
+                        }
+                    }
+                );
+            } else {
+                inflight.count--;
+                if (dispatched.hasSubscribers) {
+                    dispatched.publish({ result: returned, args });
+                }
             }
-            catch (err) {
-                console.error(err);
-                getEvent(actionName, "onFailure").publish({ reason: err, args: arguments });
-            }
+
+            return returned;
         };
-    });
+
+        Object.defineProperties(wrapped, {
+            pending: {
+                get: () => inflight.count > 0,
+                enumerable: false
+            },
+            onDispatching: {
+                value: {
+                    subscribe: (fn: (...args: unknown[]) => void) =>
+                        dispatching.subscribe(args => fn(...args))
+                },
+                enumerable: false
+            },
+            onDispatched: {
+                value: {
+                    subscribe: (fn: (result: unknown, ...args: unknown[]) => void) =>
+                        dispatched.subscribe(message => fn(message.result, ...message.args))
+                },
+                enumerable: false
+            },
+            onFailure: {
+                value: {
+                    subscribe: (fn: (error: unknown, ...args: unknown[]) => void) =>
+                        failure.subscribe(message => fn(message.error, ...message.args))
+                },
+                enumerable: false
+            }
+        });
+
+        (result as Record<string, unknown>)[actionName] = wrapped;
+    }
 
     return result;
 }
 
-function defineState<
-    TState extends object,
-    TEvents extends Record<string, Topic<any>>
->(
-    value: TState,
-    storeInstanceName: string,
-    scope: EffectScope,
-    messages: Topic<any>[]
-) {
+// ============================================================================
+// Store proxy (the flat surface)
+// ============================================================================
 
-    // Use signal directly for the state
-    const state = signal(value);
-    const events: any = {};
-    const mutate: any = {};
-
-    function initProperty(key: string) {
-        // Setup watcher
-        scope.run(() => {
-            watch(() => (state as any)[key], (newValue: any) => {
-                triggerEvent(key, newValue);
-            }, { deep: true, immediate: true });
-        });
-
-        // Setup mutate
-        mutate[key] = (val: any) => {
-            try {
-                let newValue;
-                if (typeof val === "function") {
-                    newValue = val((state as any)[key]);
-                } else {
-                    newValue = val;
-                }
-                (state as any)[key] = newValue;
-            } catch (err) {
-                console.error(err);
-            }
-        };
-
-        // Setup event
-        const eventKey = `onMutated${key.charAt(0).toUpperCase()}${key.slice(1)}`;
-        if (!events[eventKey]) {
-            const topic = createTopic({
-                namespace: `${storeInstanceName}.events`,
-                name: eventKey
+function buildStoreProxy(target: Record<string | symbol, unknown>, id: string): object {
+    // Map returned key-signal data properties to their slices. Accessor
+    // getters are deliberately NOT evaluated here — only data props checked.
+    const publicKeys = new Map<string, { slice: Slice; sourceKey: string }>();
+    const descriptors = Object.getOwnPropertyDescriptors(target);
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+        if ('value' in descriptor && isKeySignal(descriptor.value)) {
+            publicKeys.set(key, {
+                slice: descriptor.value[KeySlice],
+                sourceKey: descriptor.value[KeyName]
             });
-            events[eventKey] = topic;
-            messages.push(topic);
         }
     }
 
-    function triggerEvent(name: string, value: any) {
-        const keyString = name;
-        const afterEventKey = `onMutated${keyString.charAt(0).toUpperCase()}${keyString.slice(1)}`;
-        events[afterEventKey]?.publish(value);
-    }
-
-    if (value) {
-        Object.keys(value).forEach(key => {
-            initProperty(key);
-        });
-    }
-
-    return {
-        state: state as TState,
-        events: events as StoreEvents<TState, TEvents>,
-        mutate: mutate as StoreActionContext<TState, {}, {}, TEvents, {}>["mutate"]
+    let eventsCache: Record<string, StateKeyEvent<unknown>> | null = null;
+    const getEvents = () => {
+        if (!eventsCache) {
+            eventsCache = {};
+            for (const [key, mapping] of publicKeys) {
+                eventsCache[key] = mapping.slice.events[mapping.sourceKey];
+            }
+        }
+        return eventsCache;
     };
+
+    // Draft for the $patch function form: reads/writes route to slices.
+    const publicDraft = new Proxy({} as Record<string, unknown>, {
+        get(_t, key) {
+            if (typeof key !== 'string') return undefined;
+            const mapping = publicKeys.get(key);
+            if (!mapping) {
+                throw new Error(`[@sigx/store] ${id}: $patch draft has no state key "${key}".`);
+            }
+            return mapping.slice.state[mapping.sourceKey];
+        },
+        set(_t, key, value) {
+            if (typeof key !== 'string') return false;
+            const mapping = publicKeys.get(key);
+            if (!mapping) {
+                throw new Error(`[@sigx/store] ${id}: $patch draft has no state key "${key}".`);
+            }
+            mapping.slice.state[mapping.sourceKey] = value;
+            return true;
+        },
+        has: (_t, key) => typeof key === 'string' && publicKeys.has(key),
+        ownKeys: () => Array.from(publicKeys.keys()),
+        getOwnPropertyDescriptor: (_t, key) =>
+            typeof key === 'string' && publicKeys.has(key)
+                ? { enumerable: true, configurable: true, writable: true, value: undefined }
+                : undefined
+    });
+
+    const $patch = (update: Record<string, unknown> | ((draft: Record<string, unknown>) => void)) => {
+        batch(() => {
+            if (typeof update === 'function') {
+                update(publicDraft);
+            } else {
+                for (const [key, value] of Object.entries(update)) {
+                    const mapping = publicKeys.get(key);
+                    if (!mapping) {
+                        throw new Error(`[@sigx/store] ${id}: $patch received unknown state key "${key}".`);
+                    }
+                    mapping.slice.state[mapping.sourceKey] = value;
+                }
+            }
+        });
+    };
+
+    const store = new Proxy(target, {
+        get(t, key, receiver) {
+            switch (key) {
+                case '$id': return id;
+                case '$patch': return $patch;
+                case '$events': return getEvents();
+                case '$dispose': return () => (t as { dispose?: () => void }).dispose?.();
+            }
+            const value = Reflect.get(t, key, receiver);
+            if (isKeySignal(value)) {
+                return value.value;
+            }
+            if (isComputed(value)) {
+                return (value as Computed<unknown>).value;
+            }
+            return value;
+        },
+        set(t, key, value, receiver) {
+            if (typeof key === 'string' && key.startsWith('$')) {
+                throw new Error(`[@sigx/store] ${id}: "${key}" is store meta and cannot be assigned.`);
+            }
+            const current = Reflect.get(t, key, receiver);
+            if (isKeySignal(current)) {
+                current.value = value;
+                return true;
+            }
+            if (isComputed(current)) {
+                throw new Error(`[@sigx/store] ${id}: "${String(key)}" is a computed value and is read-only.`);
+            }
+            return Reflect.set(t, key, value, receiver);
+        }
+        // has/ownKeys/getOwnPropertyDescriptor intentionally forward to the
+        // target: spread and Object.keys see user keys, never $-meta.
+    });
+
+    storeInternals.set(store, { id, target, publicKeys });
+    return store;
+}
+
+// ============================================================================
+// Global plugin hook
+// ============================================================================
+
+const storePlugins = new Set<(ctx: StorePluginContext) => void>();
+
+/**
+ * Register a plugin that runs for every store instance, synchronously after
+ * its setup returns. Plugins run in registration order; a throwing plugin is
+ * isolated and cannot break store creation. Returns a Subscription whose
+ * unsubscribe stops future invocations.
+ */
+export function onStoreCreated(plugin: (ctx: StorePluginContext) => void): Subscription {
+    storePlugins.add(plugin);
+    return {
+        unsubscribe: () => {
+            storePlugins.delete(plugin);
+        }
+    };
+}
+
+// ============================================================================
+// defineStore
+// ============================================================================
+
+const instanceCounters = new Map<string, number>();
+
+export function defineStore<TReturn extends object>(
+    name: string,
+    setup: (ctx: SetupStoreContext) => TReturn,
+    lifetime?: Lifetime
+): () => UnwrapStore<TReturn>;
+export function defineStore<TReturn extends object, T1>(
+    name: string,
+    setup: (ctx: SetupStoreContext, param1: T1) => TReturn,
+    lifetime?: Lifetime
+): (param1: T1) => UnwrapStore<TReturn>;
+export function defineStore<TReturn extends object, T1, T2>(
+    name: string,
+    setup: (ctx: SetupStoreContext, param1: T1, param2: T2) => TReturn,
+    lifetime?: Lifetime
+): (param1: T1, param2: T2) => UnwrapStore<TReturn>;
+export function defineStore<TReturn extends object, T1, T2, T3>(
+    name: string,
+    setup: (ctx: SetupStoreContext, param1: T1, param2: T2, param3: T3) => TReturn,
+    lifetime?: Lifetime
+): (param1: T1, param2: T2, param3: T3) => UnwrapStore<TReturn>;
+export function defineStore<TReturn extends object>(
+    name: string,
+    setup: (ctx: SetupStoreContext, ...args: any[]) => TReturn,
+    lifetime: Lifetime = 'scoped'
+) {
+    return defineFactory((ctxFactory: SetupFactoryContext, ...args: unknown[]) => {
+        const count = (instanceCounters.get(name) ?? 0) + 1;
+        instanceCounters.set(name, count);
+        const id = `${name}#${count}`;
+
+        const topics: Topic<unknown>[] = [];
+        const groups: { destroy(): void }[] = [];
+
+        const ctx: SetupStoreContext = {
+            ...ctxFactory,
+            storeName: name,
+            instanceId: id,
+            defineState: initial => makeState(initial, id, topics),
+            defineActions: actions => makeActions(actions, id, topics),
+            defineEvents: <EventMap extends Record<string, any>>() => {
+                const group = createTopicGroup<EventMap>({ namespace: `${id}.events` });
+                groups.push(group);
+                return group.topics;
+            }
+        };
+
+        const result = setup(ctx, ...args);
+        if (result === null || typeof result !== 'object') {
+            throw new Error(`[@sigx/store] ${id}: the store setup must return an object.`);
+        }
+
+        ctxFactory.onDeactivated(() => {
+            // Destroying topics deactivates their refCount watchers too.
+            topics.forEach(topic => topic.destroy());
+            groups.forEach(group => group.destroy());
+        });
+
+        const store = buildStoreProxy(result as Record<string | symbol, unknown>, id);
+
+        for (const plugin of storePlugins) {
+            try {
+                plugin({
+                    name,
+                    instanceId: id,
+                    instance: result,
+                    onDeactivated: ctxFactory.onDeactivated
+                });
+            } catch (err) {
+                console.error(`[@sigx/store] ${id}: error in onStoreCreated plugin:`, err);
+            }
+        }
+
+        return store;
+    }, lifetime) as unknown as (...args: unknown[]) => UnwrapStore<TReturn>;
+}
+
+// ============================================================================
+// storeToSignals
+// ============================================================================
+
+/**
+ * Destructuring-safe views of a store: key signals for state keys, read-only
+ * signal views for computeds. Functions and `$`-meta are skipped.
+ *
+ * @example
+ * ```ts
+ * const { todos, remaining } = storeToSignals(store);
+ * todos.value.push(item);   // still reactive
+ * ```
+ */
+export function storeToSignals<TReturn extends object>(store: { readonly [StoreShape]?: TReturn }): {
+    [K in keyof TReturn as TReturn[K] extends KeySignal<any> | Computed<any> ? K : never]:
+        TReturn[K] extends KeySignal<infer V> ? KeySignal<V>
+        : TReturn[K] extends Computed<infer V> ? { readonly value: V }
+        : never;
+} {
+    const internals = storeInternals.get(store as object);
+    if (!internals) {
+        throw new Error('[@sigx/store] storeToSignals expects a store instance created by defineStore.');
+    }
+
+    const result: Record<string, unknown> = {};
+    const descriptors = Object.getOwnPropertyDescriptors(internals.target);
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+        if (!('value' in descriptor)) continue;
+        const value = descriptor.value;
+        if (isKeySignal(value)) {
+            result[key] = value;
+        } else if (isComputed(value)) {
+            result[key] = {
+                get value() {
+                    return (value as Computed<unknown>).value;
+                }
+            };
+        }
+    }
+    return result as ReturnType<typeof storeToSignals<TReturn>>;
 }

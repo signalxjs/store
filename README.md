@@ -2,7 +2,7 @@
 
 # @sigx/store
 
-**Reactive store for [SignalX](https://github.com/signalxjs/core).**
+**Reactive store for [SignalX](https://sigx.dev/core/).**
 
 [![npm](https://img.shields.io/npm/v/@sigx/store.svg?label=@sigx/store&color=blue)](https://www.npmjs.com/package/@sigx/store)
 [![license](https://img.shields.io/npm/l/@sigx/store.svg)](./LICENSE)
@@ -12,6 +12,10 @@
 </div>
 
 > 🚧 SignalX is in early public release (`0.4.x`). The API surface is small and stabilising — feedback is very welcome.
+
+## 📚 Documentation
+
+Full guides, API reference and live examples → **<https://sigx.dev/store/>**
 
 ## Install
 
@@ -61,14 +65,14 @@ export const Counter = component(() => {
 - **Type-safe** — full TS inference for state and actions.
 - **No global setup** — stores are plain factory functions; instantiate where you need them.
 
-## Companion repos
+## Part of SignalX
 
-- [`signalxjs/core`](https://github.com/signalxjs/core) — `reactivity`, `runtime-core`, `runtime-dom`, `server-renderer`, `vite`, `sigx`
-- [`signalxjs/router`](https://github.com/signalxjs/router) — `@sigx/router`
-- [`signalxjs/ssg`](https://github.com/signalxjs/ssg) — `@sigx/ssg`, `@sigx/ssr-islands`, `@sigx/ssg-theme-daisyui`
-- [`signalxjs/cli`](https://github.com/signalxjs/cli) — `@sigx/cli` (sigx-cli plugin host)
-- [`signalxjs/lynx`](https://github.com/signalxjs/lynx) — Lynx native runtime + modules
-- [Docs site](https://signalxjs.github.io/) — main SignalX documentation
+- [`core`](https://sigx.dev/core/) — `reactivity`, `runtime-core`, `runtime-dom`, `server-renderer`, `vite`, `sigx`
+- [`router`](https://sigx.dev/router/) — `@sigx/router`
+- [`ssg`](https://sigx.dev/ssg/) — `@sigx/ssg`, `@sigx/ssr-islands`, `@sigx/ssg-theme-daisyui`
+- [`cli`](https://sigx.dev/cli/) — `@sigx/cli` (sigx-cli plugin host)
+- [`lynx`](https://sigx.dev/lynx/) — Lynx native runtime + modules
+- [Docs site](https://sigx.dev/) — main SignalX documentation
 
 ## Contributing
 

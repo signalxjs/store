@@ -44,7 +44,11 @@ export interface SSRStateHandle {
 }
 
 function isDev(): boolean {
-    return (globalThis as any).process?.env?.NODE_ENV !== 'production';
+    // Absent NODE_ENV (production browser builds without an injected
+    // `process`) must NOT enable dev warnings — only an explicitly set
+    // non-production value does (vite dev sets 'development', vitest 'test').
+    const env = (globalThis as any).process?.env?.NODE_ENV;
+    return env !== undefined && env !== 'production';
 }
 
 /** Plain snapshot of the (picked) slice keys — reads through the proxy. */
@@ -111,7 +115,9 @@ export function ssrState<TState extends object>(
         const seed = blob[key];
         delete blob[key];
 
-        if (seed && typeof seed === 'object') {
+        // Plain objects only — an array (or other exotic) seed would
+        // Object.assign numeric keys onto the state shape.
+        if (seed && typeof seed === 'object' && !Array.isArray(seed)) {
             const filtered = options.pick
                 ? (Object.fromEntries(
                     options.pick

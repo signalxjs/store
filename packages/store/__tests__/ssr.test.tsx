@@ -143,6 +143,15 @@ describe('ssrState — client seeding', () => {
         expect(cart.items).toEqual([]);
         expect(cart.$ssr.hydrated).toBe(false);
     });
+
+    it('ignores array seeds (numeric keys must not be assigned onto the state)', () => {
+        const name = nextName();
+        (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: ['a', 'b'] };
+        const cart = makeCartStore(name)() as any;
+        expect(cart.items).toEqual([]);
+        expect((cart as any)['0']).toBeUndefined();
+        expect(cart.$ssr.hydrated).toBe(false);
+    });
 });
 
 describe('ssrState — full round trip', () => {

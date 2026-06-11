@@ -169,6 +169,22 @@ describe('ssrState — client seeding', () => {
     });
 });
 
+describe('ssrState — reserved keys', () => {
+    it('a caller-supplied pick cannot smuggle reserved keys into the patch', () => {
+        const name = nextName();
+        (globalThis as any).__SIGX_ASYNC__ = {
+            [`store:${name}`]: JSON.parse('{"items":["ok"],"__proto__":{"polluted":true}}')
+        };
+
+        const useCart = makeCartStore(name, { pick: ['items', '__proto__'] as any });
+        const cart = useCart() as any;
+
+        expect(cart.items).toEqual(['ok']);
+        expect(({} as any).polluted).toBeUndefined();
+        expect(cart.$ssr.hydrated).toBe(true);
+    });
+});
+
 describe('ssrState — full round trip', () => {
     it('server render → blob → client store matches the server state', async () => {
         const name = nextName();

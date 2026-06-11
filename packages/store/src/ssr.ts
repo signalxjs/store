@@ -43,6 +43,9 @@ export interface SSRStateHandle {
     readonly hydrated: boolean;
 }
 
+/** Keys with prototype-mutation semantics — never applied to state. */
+const RESERVED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function isDev(): boolean {
     // Absent NODE_ENV (production browser builds without an injected
     // `process`) must NOT enable dev warnings — only an explicitly set
@@ -123,9 +126,12 @@ export function ssrState<TState extends object>(
         // Object.assign numeric keys onto the state shape.
         if (seed && typeof seed === 'object' && !Array.isArray(seed)) {
             // ALWAYS filter to the slice's known keys (∩ pick): a tampered
-            // blob must not assign unexpected keys — incl. "__proto__"-style
-            // ones — onto the reactive state.
-            const allowed = options.pick ?? (Object.keys(slice.state) as (keyof TState)[]);
+            // blob must not assign unexpected keys onto the reactive state.
+            // Reserved keys are excluded from the allow-list itself, so even
+            // a caller-supplied pick (e.g. via `as any`) can't smuggle
+            // "__proto__"-style keys into patch()'s Object.assign.
+            const allowed = (options.pick ?? (Object.keys(slice.state) as (keyof TState)[]))
+                .filter(k => !RESERVED_KEYS.has(k as string));
             const filtered = Object.fromEntries(
                 allowed
                     .filter(k => Object.prototype.hasOwnProperty.call(seed, k))

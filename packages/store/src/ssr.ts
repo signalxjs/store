@@ -54,14 +54,20 @@ function isDev(): boolean {
     return env !== undefined && env !== 'production';
 }
 
-/** Plain snapshot of the (picked) slice keys — reads through the proxy. */
+/**
+ * Plain snapshot of the (picked) slice keys — reads through the proxy.
+ * Null-prototype accumulator + reserved-key skip: assigning a literal
+ * "__proto__" slice/pick key into a plain object would mutate the
+ * prototype before serialization.
+ */
 function snapshot<TState extends object>(
     state: TState,
     pick: (keyof TState)[] | undefined
 ): Partial<TState> {
-    const out: Partial<TState> = {};
+    const out: Partial<TState> = Object.create(null);
     const keys = pick ?? (Object.keys(state) as (keyof TState)[]);
     for (const key of keys) {
+        if (RESERVED_KEYS.has(key as string)) continue;
         out[key] = state[key];
     }
     return out;
@@ -130,8 +136,11 @@ export function ssrState<TState extends object>(
             // Reserved keys are excluded from the allow-list itself, so even
             // a caller-supplied pick (e.g. via `as any`) can't smuggle
             // "__proto__"-style keys into patch()'s Object.assign.
+            // pick ∩ ACTUAL slice keys: a pick entry for a key the slice
+            // doesn't have must not let the blob patch it in.
+            const sliceKeys = new Set(Object.keys(slice.state));
             const allowed = (options.pick ?? (Object.keys(slice.state) as (keyof TState)[]))
-                .filter(k => !RESERVED_KEYS.has(k as string));
+                .filter(k => sliceKeys.has(k as string) && !RESERVED_KEYS.has(k as string));
             const filtered = Object.fromEntries(
                 allowed
                     .filter(k => Object.prototype.hasOwnProperty.call(seed, k))

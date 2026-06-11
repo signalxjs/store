@@ -185,6 +185,21 @@ describe('ssrState — reserved keys', () => {
     });
 });
 
+describe('ssrState — pick is intersected with real slice keys', () => {
+    it('a pick entry for a key the slice does not have is never patched', () => {
+        const name = nextName();
+        (globalThis as any).__SIGX_ASYNC__ = {
+            [`store:${name}`]: { items: ['ok'], notASliceKey: 'INJECTED' }
+        };
+
+        const useCart = makeCartStore(name, { pick: ['items', 'notASliceKey'] as any });
+        const cart = useCart() as any;
+
+        expect(cart.items).toEqual(['ok']);
+        expect(cart.notASliceKey).toBeUndefined();
+    });
+});
+
 describe('ssrState — full round trip', () => {
     it('server render → blob → client store matches the server state', async () => {
         const name = nextName();

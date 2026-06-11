@@ -85,8 +85,12 @@ export function ssrState<TState extends object>(
     const instance = getCurrentInstance() as any;
     const renderCtx = instance?.ssr?.isServer ? instance.ssr._ctx : null;
 
-    if (renderCtx?._asyncResults) {
-        if (isDev() && renderCtx._asyncResults.has(key)) {
+    // Duck-typed boundary: tolerate render contexts without the expected
+    // Map-like _asyncResults (older/alternative SSR runtimes) instead of
+    // throwing inside a store setup.
+    const results = renderCtx?._asyncResults;
+    if (results && typeof results.set === 'function') {
+        if (isDev() && typeof results.has === 'function' && results.has(key)) {
             console.warn(
                 `[ssrState] "${ctx.storeName}" registered twice in one request — ` +
                 `the serialized state would be last-write-wins. One store ` +
@@ -96,7 +100,7 @@ export function ssrState<TState extends object>(
         // LIVE registration: toJSON defers the snapshot to emit time (the
         // serializer stringifies after the shell render), so state mutated
         // during the request serializes with its final values.
-        renderCtx._asyncResults.set(key, {
+        results.set(key, {
             toJSON: () => snapshot(slice.state, options.pick)
         });
         return { hydrated: false };

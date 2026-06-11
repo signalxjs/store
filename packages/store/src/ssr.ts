@@ -35,7 +35,7 @@ import type { Patch, SetupStoreContext } from "./store.js";
 
 export interface SSRStateOptions<TState extends object> {
     /** Serialize (and seed) only these keys. Default: all slice keys. */
-    pick?: (keyof TState)[];
+    pick?: Extract<keyof TState, string>[];
 }
 
 export interface SSRStateHandle {
@@ -62,12 +62,14 @@ function isDev(): boolean {
  */
 function snapshot<TState extends object>(
     state: TState,
-    pick: (keyof TState)[] | undefined
+    pick: Extract<keyof TState, string>[] | undefined
 ): Partial<TState> {
     const out: Partial<TState> = Object.create(null);
-    const keys = pick ?? (Object.keys(state) as (keyof TState)[]);
+    // Slices only have string keys at runtime (defineState enumerates
+    // Object.keys), so string-keyed iteration is exact.
+    const keys = pick ?? (Object.keys(state) as Extract<keyof TState, string>[]);
     for (const key of keys) {
-        if (RESERVED_KEYS.has(key as string)) continue;
+        if (RESERVED_KEYS.has(key)) continue;
         out[key] = state[key];
     }
     return out;
@@ -139,12 +141,12 @@ export function ssrState<TState extends object>(
             // pick ∩ ACTUAL slice keys: a pick entry for a key the slice
             // doesn't have must not let the blob patch it in.
             const sliceKeys = new Set(Object.keys(slice.state));
-            const allowed = (options.pick ?? (Object.keys(slice.state) as (keyof TState)[]))
-                .filter(k => sliceKeys.has(k as string) && !RESERVED_KEYS.has(k as string));
+            const allowed = (options.pick ?? (Object.keys(slice.state) as Extract<keyof TState, string>[]))
+                .filter(k => sliceKeys.has(k) && !RESERVED_KEYS.has(k));
             const filtered = Object.fromEntries(
                 allowed
                     .filter(k => Object.prototype.hasOwnProperty.call(seed, k))
-                    .map(k => [k, (seed as Record<string, unknown>)[k as string]])
+                    .map(k => [k, (seed as Record<string, unknown>)[k]])
             ) as Partial<TState>;
             slice.patch(filtered);
             return { hydrated: true };

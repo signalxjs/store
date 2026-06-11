@@ -13,6 +13,10 @@
         "./persist": {
             "import": "./dist/persist.js",
             "types": "./dist/persist.d.ts"
+        },
+        "./ssr": {
+            "import": "./dist/ssr.js",
+            "types": "./dist/ssr.d.ts"
         }
     },
     "files": [
@@ -42,7 +46,9 @@
     "devDependencies": {
         "@sigx/reactivity": "^0.6.0",
         "@sigx/runtime-core": "^0.6.0",
+        "@sigx/server-renderer": "^0.6.0",
         "@types/node": "^25.9.1",
+        "sigx": "^0.6.0",
         "typescript": "^6.0.3"
     },
     "publishConfig": {

@@ -144,6 +144,21 @@ describe('ssrState — client seeding', () => {
         expect(cart.$ssr.hydrated).toBe(false);
     });
 
+    it('drops unknown/tampered keys from the seed (incl. __proto__-style)', () => {
+        const name = nextName();
+        (globalThis as any).__SIGX_ASYNC__ = {
+            [`store:${name}`]: JSON.parse(
+                '{"items":["ok"],"injected":"nope","__proto__":{"polluted":true}}'
+            )
+        };
+
+        const cart = makeCartStore(name)() as any;
+        expect(cart.items).toEqual(['ok']);
+        expect(cart.injected).toBeUndefined();
+        expect(({} as any).polluted).toBeUndefined(); // Object.prototype untouched
+        expect(cart.$ssr.hydrated).toBe(true);
+    });
+
     it('ignores array seeds (numeric keys must not be assigned onto the state)', () => {
         const name = nextName();
         (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: ['a', 'b'] };

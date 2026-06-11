@@ -118,13 +118,15 @@ export function ssrState<TState extends object>(
         // Plain objects only — an array (or other exotic) seed would
         // Object.assign numeric keys onto the state shape.
         if (seed && typeof seed === 'object' && !Array.isArray(seed)) {
-            const filtered = options.pick
-                ? (Object.fromEntries(
-                    options.pick
-                        .filter(k => Object.prototype.hasOwnProperty.call(seed, k))
-                        .map(k => [k, (seed as Record<string, unknown>)[k as string]])
-                ) as Partial<TState>)
-                : (seed as Partial<TState>);
+            // ALWAYS filter to the slice's known keys (∩ pick): a tampered
+            // blob must not assign unexpected keys — incl. "__proto__"-style
+            // ones — onto the reactive state.
+            const allowed = options.pick ?? (Object.keys(slice.state) as (keyof TState)[]);
+            const filtered = Object.fromEntries(
+                allowed
+                    .filter(k => Object.prototype.hasOwnProperty.call(seed, k))
+                    .map(k => [k, (seed as Record<string, unknown>)[k as string]])
+            ) as Partial<TState>;
             slice.patch(filtered);
             return { hydrated: true };
         }

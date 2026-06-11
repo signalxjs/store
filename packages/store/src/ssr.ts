@@ -101,7 +101,7 @@ export function ssrState<TState extends object>(
     if (results && typeof results.set === 'function') {
         if (isDev() && typeof results.has === 'function' && results.has(key)) {
             console.warn(
-                `[ssrState] "${ctx.storeName}" registered twice in one request — ` +
+                `[@sigx/store] ssrState: "${ctx.storeName}" registered twice in one request — ` +
                 `the serialized state would be last-write-wins. One store ` +
                 `instance per name per request is the supported shape.`
             );
@@ -117,7 +117,7 @@ export function ssrState<TState extends object>(
 
     if (isDev() && instance?.ssr?.isServer) {
         console.warn(
-            `[ssrState] "${ctx.storeName}" was created on the server outside ` +
+            `[@sigx/store] ssrState: "${ctx.storeName}" was created on the server outside ` +
             `a render context — its state cannot be serialized for hydration.`
         );
     }

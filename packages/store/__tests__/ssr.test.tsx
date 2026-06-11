@@ -86,7 +86,7 @@ describe('ssrState — server serialization', () => {
         const ssr = createSSR().use(stateSerializationPlugin());
         await ssr.render((Page as any)({}));
 
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining(`"${name}" registered twice`));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining(`ssrState: "${name}" registered twice`));
         warn.mockRestore();
     });
 });

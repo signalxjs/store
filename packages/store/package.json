@@ -39,11 +39,13 @@
     "bugs": {
         "url": "https://github.com/signalxjs/store/issues"
     },
-    "dependencies": {
-        "@sigx/runtime-core": "^0.5.0",
-        "@sigx/reactivity": "^0.5.0"
+    "peerDependencies": {
+        "@sigx/runtime-core": ">=0.6.0 <0.7.0",
+        "@sigx/reactivity": ">=0.6.0 <0.7.0"
     },
     "devDependencies": {
+        "@sigx/reactivity": "^0.6.0",
+        "@sigx/runtime-core": "^0.6.0",
         "typescript": "^6.0.3"
     },
     "publishConfig": {

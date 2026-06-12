@@ -282,7 +282,7 @@ function makeActions<TActions extends Record<string, (...args: any[]) => any>>(
                                 dispatched.publish({ result: resolved, args });
                             }
                         } catch (err) {
-                            if (process.env.NODE_ENV !== 'production') {
+                            if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
                                 console.error(`[@sigx/store] ${storeId}: error settling action "${actionName}":`, err);
                             } else {
                                 console.error(err);
@@ -296,7 +296,7 @@ function makeActions<TActions extends Record<string, (...args: any[]) => any>>(
                                 failure.publish({ error: err, args });
                             }
                         } catch (settleErr) {
-                            if (process.env.NODE_ENV !== 'production') {
+                            if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
                                 console.error(`[@sigx/store] ${storeId}: error settling action "${actionName}":`, settleErr);
                             } else {
                                 console.error(settleErr);
@@ -561,7 +561,7 @@ export function defineStore<TReturn extends object>(
                     onDeactivated: ctxFactory.onDeactivated
                 });
             } catch (err) {
-                if (process.env.NODE_ENV !== 'production') {
+                if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
                     console.error(`[@sigx/store] ${id}: error in onStoreCreated plugin:`, err);
                 } else {
                     console.error(err);

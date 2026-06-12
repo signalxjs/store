@@ -127,11 +127,19 @@ export function persist<TState extends object>(
             const result = storage.setItem(key, serialize(snapshot())) as Promise<void> | void;
             if (result && typeof result.then === 'function') {
                 result.catch(err => {
-                    console.error(`[@sigx/store] persist("${key}"): write failed:`, err);
+                    if (process.env.NODE_ENV !== 'production') {
+                        console.error(`[@sigx/store] persist("${key}"): write failed:`, err);
+                    } else {
+                        console.error(err);
+                    }
                 });
             }
         } catch (err) {
-            console.error(`[@sigx/store] persist("${key}"): write failed:`, err);
+            if (process.env.NODE_ENV !== 'production') {
+                console.error(`[@sigx/store] persist("${key}"): write failed:`, err);
+            } else {
+                console.error(err);
+            }
         }
     };
 
@@ -184,7 +192,11 @@ export function persist<TState extends object>(
                 }
             }
         } catch (err) {
-            console.error(`[@sigx/store] persist("${key}"): hydration failed, continuing with defaults:`, err);
+            if (process.env.NODE_ENV !== 'production') {
+                console.error(`[@sigx/store] persist("${key}"): hydration failed, continuing with defaults:`, err);
+            } else {
+                console.error(err);
+            }
         }
         isHydrated = true;
         startSaving();
@@ -197,14 +209,22 @@ export function persist<TState extends object>(
     try {
         initial = storage.getItem(key);
     } catch (err) {
-        console.error(`[@sigx/store] persist("${key}"): storage read failed, continuing with defaults:`, err);
+        if (process.env.NODE_ENV !== 'production') {
+            console.error(`[@sigx/store] persist("${key}"): storage read failed, continuing with defaults:`, err);
+        } else {
+            console.error(err);
+        }
         readFailed = true;
     }
 
     const whenHydrated = !readFailed && typeof (initial as Promise<string | null> | null)?.then === 'function'
         ? (initial as Promise<string | null>).then(applyPersisted, err => {
             // A broken storage read must not block the app on defaults forever.
-            console.error(`[@sigx/store] persist("${key}"): hydration failed:`, err);
+            if (process.env.NODE_ENV !== 'production') {
+                console.error(`[@sigx/store] persist("${key}"): hydration failed:`, err);
+            } else {
+                console.error(err);
+            }
             isHydrated = true;
             startSaving();
         })

@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-12
+
 ### Changed (breaking)
 
 - `@sigx/runtime-core` and `@sigx/reactivity` are now `peerDependencies` (`>=0.5.0 <0.7.0`) instead of regular dependencies — prevents a second core copy from splitting singleton state (topic registry, DI app-context token, `instanceof` identity). Most apps already have core installed via `sigx`.
+
+### Changed
+
+- Error reporting follows the sigx dev-env convention: development builds log labeled messages (`[@sigx/store] …`), production logs the bare error so failures stay visible while label strings become strippable by consumer `NODE_ENV` defines (#34). The `NODE_ENV` gates are guarded with `typeof process !== 'undefined'` so runtimes without a `process` global don't crash (#36).
 
 ## [0.5.0] - 2026-06-10
 

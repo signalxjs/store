@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed (breaking)
 
-- `@sigx/runtime-core` and `@sigx/reactivity` are now `peerDependencies` (`>=0.5.0 <0.7.0`) instead of regular dependencies — prevents a second core copy from splitting singleton state (topic registry, DI app-context token, `instanceof` identity). Most apps already have core installed via `sigx`.
+- **`@sigx/runtime-core` and `@sigx/reactivity` are now `peerDependencies`** (`>=0.6.0 <0.7.0`) instead of regular dependencies (#33, #37). Hard-pinned 0.x caret ranges can never overlap across core minors, so an app combining `@sigx/store` with a different `sigx`/core minor silently installed **two reactivity engines** — store signals lived in a different reactivity instance than the renderer's effects, the UI never updated, and a second core copy split singleton state (topic registry, DI app-context token, `instanceof` identity). As peer dependencies the app's single core copy is always used, making duplicate engines structurally impossible. Consumer install UX is unchanged: both npm >= 7 and pnpm auto-install peer dependencies, and most apps already have core installed via `sigx`.
 
 ## [0.5.0] - 2026-06-10
 

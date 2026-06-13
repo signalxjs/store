@@ -69,6 +69,20 @@ Two conventions to know:
 
 Persistence ships at the **`@sigx/store/persist`** subpath: sync/async storage (localStorage, AsyncStorage), `pick`, `version` + `migrate`, `debounce`, a reactive `hydrated` flag, and saving paused until hydration completes.
 
+## Actions in renders
+
+Calling an action from a render (or any reactive context) is safe with respect to the wrapper itself: the action wrapper's internal bookkeeping (the `pending` counter, lifecycle-event plumbing) runs untracked, so merely *calling* an action never subscribes the render to the wrapper's internals. Reads inside the action **body** stay tracked on purpose — a getter-style action read in a render keeps the render reactive to the state it reads — and reading `action.pending` is an intentional subscription.
+
+What still loops — by design — is an action whose body **writes** reactive state when called from a render closure: the write is a real state change, the render re-runs, calls the action again, writes again. Don't resolve or fetch data by calling a writing action during render; do it in `watch`/`onMounted` (or an event handler) and let the render just read the store state:
+
+```tsx
+const Profile = component(() => {
+  const store = useUserStore();
+  onMounted(() => store.fetchUser(id));      // writes happen here…
+  return () => <p>{store.user?.name}</p>;    // …the render only reads
+});
+```
+
 ## License
 
 [MIT](https://github.com/signalxjs/store/blob/main/LICENSE)

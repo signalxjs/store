@@ -7,7 +7,7 @@ import {
     type Subscription,
     type Topic
 } from "@sigx/runtime-core";
-import { batch, signal, watch, type Computed, type WatchHandle, isComputed } from "@sigx/reactivity";
+import { batch, signal, untrack, watch, type Computed, type WatchHandle, isComputed } from "@sigx/reactivity";
 
 // ============================================================================
 // Branding & internal wiring symbols
@@ -250,19 +250,32 @@ function makeActions<TActions extends Record<string, (...args: any[]) => any>>(
         topics.push(dispatching as Topic<unknown>, dispatched as Topic<unknown>, failure as Topic<unknown>);
 
         const wrapped = function (this: unknown, ...args: unknown[]) {
-            if (dispatching.hasSubscribers) {
-                dispatching.publish(args);
-            }
-            inflight.count++;
+            // ALL wrapper bookkeeping runs untracked (#42): the `++` below is a
+            // read-modify-write on a reactive signal, and topics are
+            // signal-backed too — executed in the CALLER's tracking context,
+            // those reads would subscribe a calling render/effect to the
+            // wrapper's internals, and the settle write would re-trigger it
+            // (→ infinite re-run loop). Only `original.apply` stays tracked:
+            // reads in the action body are the caller's legitimate
+            // dependencies. Writes inside untrack still notify intentional
+            // subscribers (`.pending` readers, lifecycle topics).
+            untrack(() => {
+                if (dispatching.hasSubscribers) {
+                    dispatching.publish(args);
+                }
+                inflight.count++;
+            });
 
             let returned: unknown;
             try {
                 returned = original.apply(this, args);
             } catch (err) {
-                inflight.count--;
-                if (failure.hasSubscribers) {
-                    failure.publish({ error: err, args });
-                }
+                untrack(() => {
+                    inflight.count--;
+                    if (failure.hasSubscribers) {
+                        failure.publish({ error: err, args });
+                    }
+                });
                 // Errors are the caller's to handle — never swallowed.
                 throw err;
             }
@@ -277,10 +290,12 @@ function makeActions<TActions extends Record<string, (...args: any[]) => any>>(
                 returned.then(
                     resolved => {
                         try {
-                            inflight.count--;
-                            if (dispatched.hasSubscribers) {
-                                dispatched.publish({ result: resolved, args });
-                            }
+                            untrack(() => {
+                                inflight.count--;
+                                if (dispatched.hasSubscribers) {
+                                    dispatched.publish({ result: resolved, args });
+                                }
+                            });
                         } catch (err) {
                             if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
                                 console.error(`[@sigx/store] ${storeId}: error settling action "${actionName}":`, err);
@@ -291,10 +306,12 @@ function makeActions<TActions extends Record<string, (...args: any[]) => any>>(
                     },
                     err => {
                         try {
-                            inflight.count--;
-                            if (failure.hasSubscribers) {
-                                failure.publish({ error: err, args });
-                            }
+                            untrack(() => {
+                                inflight.count--;
+                                if (failure.hasSubscribers) {
+                                    failure.publish({ error: err, args });
+                                }
+                            });
                         } catch (settleErr) {
                             if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
                                 console.error(`[@sigx/store] ${storeId}: error settling action "${actionName}":`, settleErr);
@@ -305,10 +322,12 @@ function makeActions<TActions extends Record<string, (...args: any[]) => any>>(
                     }
                 );
             } else {
-                inflight.count--;
-                if (dispatched.hasSubscribers) {
-                    dispatched.publish({ result: returned, args });
-                }
+                untrack(() => {
+                    inflight.count--;
+                    if (dispatched.hasSubscribers) {
+                        dispatched.publish({ result: returned, args });
+                    }
+                });
             }
 
             return returned;

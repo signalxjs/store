@@ -4,6 +4,10 @@ All notable changes to `@sigx/store`. The package also keeps a per-package `pack
 
 ## [Unreleased]
 
+### Fixed
+
+- **`@sigx/store`**: the action wrapper's bookkeeping (the `pending` inflight counter and lifecycle-topic plumbing) now runs in `untrack()` — calling an action inside a reactive context (render/effect) no longer subscribes that context to the wrapper's internals, which previously caused an infinite re-run loop at microtask speed (frozen page, no error). Action-body reads stay tracked; `.pending` stays reactive (#42).
+
 ## 0.6.0 — 2026-06-12
 
 ### Changed (breaking)

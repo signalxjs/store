@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { effect } from '@sigx/reactivity';
 import { defineStore } from '../src/store';
 
 /**
@@ -308,6 +309,241 @@ describe('defineActions', () => {
         expect(store.myAction.onDispatching).toBeDefined();
         expect(store.myAction.onDispatched).toBeDefined();
         expect(store.myAction.onFailure).toBeDefined();
+    });
+});
+
+// Regression for signalxjs/store#42: the wrapper's bookkeeping (inflight
+// counter, lifecycle-topic reads/publishes) must run UNTRACKED. Calling an
+// action inside a reactive context (a component render, an effect) must not
+// subscribe that context to the wrapper's internals — otherwise the settle
+// write re-triggers the context, which calls the action again: an infinite
+// loop at microtask speed. The action BODY stays tracked: its reads are the
+// caller's legitimate dependencies.
+describe('action bookkeeping is untracked (#42)', () => {
+    it('an effect calling a sync action does not re-run when the bookkeeping settles', () => {
+        const store = createActionStore({
+            getValue: () => 42,
+        });
+
+        let runs = 0;
+        const runner = effect(() => {
+            runs++;
+            if (runs > 5) return; // safety valve: bounds the loop on regression
+            store.getValue();
+        });
+
+        expect(runs).toBe(1);
+        runner.stop();
+    });
+
+    it('two effects calling the same sync action do not re-trigger each other (render ping-pong)', () => {
+        // Two components rendering the same getter-action: on buggy code,
+        // effect A subscribes to `inflight` via the `++` read, then effect
+        // B's `++`/`--` writes re-trigger A, whose writes re-trigger B — a
+        // synchronous infinite ping-pong (the page-freeze shape for sync
+        // actions; self-triggers alone are skipped by the effect runtime).
+        const store = createActionStore({
+            getValue: () => 42,
+        });
+
+        let runsA = 0;
+        let runsB = 0;
+        const runnerA = effect(() => {
+            runsA++;
+            if (runsA > 5) return; // safety valve: bounds the loop on regression
+            store.getValue();
+        });
+        const runnerB = effect(() => {
+            runsB++;
+            if (runsB > 5) return; // safety valve: bounds the loop on regression
+            store.getValue();
+        });
+
+        expect(runsA).toBe(1);
+        expect(runsB).toBe(1);
+        runnerA.stop();
+        runnerB.stop();
+    });
+
+    it('a scheduler-driven (renderer-style) effect calling a sync action is never re-scheduled', async () => {
+        // Renderers drive re-renders through the effect `scheduler` option,
+        // which is notified for ANY trigger — including the wrapper's own
+        // `inflight` writes during the render itself. This is the exact
+        // page-freeze shape: render → action → bookkeeping write →
+        // re-scheduled render → action → … at microtask speed.
+        const store = createActionStore({
+            getValue: () => 42,
+        });
+
+        let runs = 0;
+        let scheduled = 0;
+        const runner = effect(
+            () => {
+                runs++;
+                store.getValue();
+            },
+            {
+                scheduler: (run) => {
+                    scheduled++;
+                    if (scheduled > 10) return; // safety valve: bounds the loop on regression
+                    queueMicrotask(run);
+                },
+            }
+        );
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(scheduled).toBe(0);
+        expect(runs).toBe(1);
+        runner.stop();
+    });
+
+    it('a scheduler-driven effect calling a sync action with lifecycle subscribers is never re-scheduled', async () => {
+        const store = createActionStore({
+            work: (x: number) => x * 2,
+        });
+        const order: string[] = [];
+        store.work.onDispatching.subscribe((x) => order.push(`dispatching:${x}`));
+        store.work.onDispatched.subscribe((result) => order.push(`dispatched:${result}`));
+
+        let runs = 0;
+        let scheduled = 0;
+        const runner = effect(
+            () => {
+                runs++;
+                store.work(21);
+            },
+            {
+                scheduler: (run) => {
+                    scheduled++;
+                    if (scheduled > 10) return; // safety valve: bounds the loop on regression
+                    queueMicrotask(run);
+                },
+            }
+        );
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(scheduled).toBe(0);
+        expect(runs).toBe(1);
+        expect(order).toEqual(['dispatching:21', 'dispatched:42']);
+        runner.stop();
+    });
+
+    it('an effect calling an async action does not re-run when the action settles', async () => {
+        const d = deferred<string>();
+        const store = createActionStore({
+            load: () => d.promise,
+        });
+
+        let runs = 0;
+        const runner = effect(() => {
+            runs++;
+            if (runs > 5) return; // safety valve: bounds the loop on regression
+            void store.load();
+        });
+
+        expect(runs).toBe(1);
+
+        d.resolve('ok');
+        await d.promise;
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(runs).toBe(1);
+        runner.stop();
+    });
+
+    it('an effect calling an action with lifecycle subscribers does not re-run, and the events still fire', () => {
+        const order: string[] = [];
+        const store = createActionStore({
+            work: (x: number) => x * 2,
+        });
+        store.work.onDispatching.subscribe((x) => order.push(`dispatching:${x}`));
+        store.work.onDispatched.subscribe((result) => order.push(`dispatched:${result}`));
+
+        let runs = 0;
+        const runner = effect(() => {
+            runs++;
+            if (runs > 5) return; // safety valve: bounds the loop on regression
+            store.work(21);
+        });
+
+        expect(runs).toBe(1);
+        expect(order).toEqual(['dispatching:21', 'dispatched:42']);
+        runner.stop();
+    });
+
+    it('an effect calling a sync-throwing action does not re-run, and onFailure still fires', () => {
+        const failure = vi.fn();
+        const store = createActionStore({
+            failing: () => {
+                throw new Error('boom');
+            },
+        });
+        store.failing.onFailure.subscribe(failure);
+
+        let runs = 0;
+        const runner = effect(() => {
+            runs++;
+            if (runs > 5) return; // safety valve: bounds the loop on regression
+            try {
+                store.failing();
+            } catch {
+                // swallowed: the loop under test is reactive, not exceptional
+            }
+        });
+
+        expect(runs).toBe(1);
+        expect(failure).toHaveBeenCalledTimes(1);
+        runner.stop();
+    });
+
+    it('an effect calling an async-rejecting action does not re-run, and onFailure still fires', async () => {
+        const d = deferred<string>();
+        const store = createActionStore({
+            load: () => d.promise,
+        });
+        const failure = vi.fn();
+        store.load.onFailure.subscribe(failure);
+
+        let runs = 0;
+        const runner = effect(() => {
+            runs++;
+            if (runs > 5) return; // safety valve: bounds the loop on regression
+            store.load().catch(() => {});
+        });
+
+        expect(runs).toBe(1);
+
+        d.reject(new Error('nope'));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(runs).toBe(1);
+        expect(failure).toHaveBeenCalledTimes(1);
+        runner.stop();
+    });
+
+    it('.pending stays reactive: an effect reading it re-runs on pending transitions', async () => {
+        const d = deferred<string>();
+        const store = createActionStore({
+            load: () => d.promise,
+        });
+
+        const seen: boolean[] = [];
+        const runner = effect(() => {
+            seen.push(store.load.pending);
+        });
+        expect(seen).toEqual([false]);
+
+        const promise = store.load();
+        expect(seen).toEqual([false, true]);
+
+        d.resolve('done');
+        await promise;
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(seen).toEqual([false, true, false]);
+        runner.stop();
     });
 });
 

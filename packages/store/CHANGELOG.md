@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Action-wrapper bookkeeping no longer subscribes the caller's reactive context** (#42). The wrapper's `inflight` counter is a reactive signal and its `++` is a read-modify-write executed in the caller's tracking context — calling any action (even a pure getter) from a render/effect subscribed that context to the wrapper's internals, and the settle write (`--`, sync or in the async settle) re-triggered it: an infinite re-run loop at microtask speed that froze the page with no error. All wrapper bookkeeping (inflight `++`/`--` in every path, lifecycle-topic `hasSubscribers`/`publish`) now runs in `untrack()`. The action body stays tracked (its reads are the caller's legitimate dependencies) and `.pending` stays reactive for intentional subscribers. Note: an action whose body *writes* reactive state still self-loops when called from a render closure — by design (body writes are real state changes); fetch/resolve in `watch`/`onMounted` instead and let the render read the store state (see "Actions in renders" in the README).
+
 ## [0.6.0] - 2026-06-12
 
 ### Changed (breaking)

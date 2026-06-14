@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-14
+
 ### Added
 
-- **`@sigx/store/ssr`** (new package entry): `ssrState(ctx, { state, patch }, options?)` — call inside a store setup (persist-style) to transfer the slice from server render to client hydration. Server: registers a live, `toJSON`-deferred snapshot under `store:<name>` on the per-request render context — the core `stateSerializationPlugin` (automatic under `renderDocument`) emits it in `window.__SIGX_ASYNC__` with final post-mutation values; no `@sigx/server-renderer` dependency in this package (duck-typed boundary). Client: seeds via one atomic `patch()`, consume-once, always filtered to the slice's known keys (∩ `pick`) so tampered blobs can't assign unexpected keys. Returns `{ hydrated }`. Composes with `persist()` — call `ssrState` first; device-local data wins. (#26)
+- **`@sigx/store/ssr`** (new package entry): `ssrState(ctx, { state, patch }, options?)` — call inside a store setup (persist-style) to transfer the slice from server render to client hydration. Server: registers a live, `toJSON`-deferred snapshot under `store:<name>` on the per-request render context — the core `stateSerializationPlugin` (automatic under `renderDocument`) emits it in `window.__SIGX_ASYNC__` with final post-mutation values; no `@sigx/server-renderer` dependency in this package (duck-typed boundary). Client: seeds via one atomic `patch()`, consume-once, browser-gated (reads `window.__SIGX_ASYNC__` first, then `globalThis`), always filtered to the slice's known keys (∩ `pick`) so tampered blobs can't assign unexpected keys. Returns `{ hydrated }`. Composes with `persist()` — call `ssrState` first; device-local data wins. (#26)
 
 ## [0.6.1] - 2026-06-13
 

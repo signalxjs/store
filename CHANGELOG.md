@@ -4,6 +4,12 @@ All notable changes to `@sigx/store`. The package also keeps a per-package `pack
 
 ## [Unreleased]
 
+## 0.7.0 — 2026-06-14
+
+### Added
+
+- **`@sigx/store/ssr`**: `ssrState(ctx, { state, patch }, options?)` — a persist-style one-liner that transfers store state from server render to client hydration. The server registers a live `toJSON`-deferred snapshot under `store:<name>`, emitted into `window.__SIGX_ASYNC__` by the core `stateSerializationPlugin` (zero `@sigx/server-renderer` dependency in this package); the client seeds via one atomic `patch()`, consume-once and browser-gated. `pick` filters the wire both ways; composes with `persist()` (call `ssrState` first). (#26, #27)
+
 ## 0.6.1 — 2026-06-13
 
 ### Fixed

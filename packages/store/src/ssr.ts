@@ -46,14 +46,6 @@ export interface SSRStateHandle {
 /** Keys with prototype-mutation semantics — never applied to state. */
 const RESERVED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
-function isDev(): boolean {
-    // Absent NODE_ENV (production browser builds without an injected
-    // `process`) must NOT enable dev warnings — only an explicitly set
-    // non-production value does (vite dev sets 'development', vitest 'test').
-    const env = (globalThis as any).process?.env?.NODE_ENV;
-    return env !== undefined && env !== 'production';
-}
-
 /**
  * Plain snapshot of the (picked) slice keys — reads through the proxy.
  * Null-prototype accumulator + reserved-key skip: assigning a literal
@@ -101,7 +93,7 @@ export function ssrState<TState extends object>(
     // throwing inside a store setup.
     const results = renderCtx?._asyncResults;
     if (results && typeof results.set === 'function') {
-        if (isDev() && typeof results.has === 'function' && results.has(key)) {
+        if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production' && typeof results.has === 'function' && results.has(key)) {
             console.warn(
                 `[@sigx/store] ssrState: "${ctx.storeName}" registered twice in one request — ` +
                 `the serialized state would be last-write-wins. One store ` +
@@ -117,11 +109,18 @@ export function ssrState<TState extends object>(
         return { hydrated: false };
     }
 
-    if (isDev() && instance?.ssr?.isServer) {
-        console.warn(
-            `[@sigx/store] ssrState: "${ctx.storeName}" was created on the server outside ` +
-            `a render context — its state cannot be serialized for hydration.`
-        );
+    // On the server but with no usable render context: bail out. We must NOT
+    // fall through to the client seeding path below — `globalThis.__SIGX_ASYNC__`
+    // can exist as a Node global shared across requests, which would patch
+    // server-side state from another request's blob.
+    if (instance?.ssr?.isServer) {
+        if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
+            console.warn(
+                `[@sigx/store] ssrState: "${ctx.storeName}" was created on the server outside ` +
+                `a render context — its state cannot be serialized for hydration.`
+            );
+        }
+        return { hydrated: false };
     }
 
     // ── Client: seed from the blob (consume-once) ──────────────────────

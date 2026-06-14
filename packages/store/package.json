@@ -44,11 +44,11 @@
         "url": "https://github.com/signalxjs/store/issues"
     },
     "devDependencies": {
-        "@sigx/reactivity": "^0.6.0",
-        "@sigx/runtime-core": "^0.6.0",
-        "@sigx/server-renderer": "^0.6.0",
+        "@sigx/reactivity": "^0.6.3",
+        "@sigx/runtime-core": "^0.6.3",
+        "@sigx/server-renderer": "^0.6.3",
         "@types/node": "^25.9.1",
-        "sigx": "^0.6.0",
+        "sigx": "^0.6.3",
         "typescript": "^6.0.3"
     },
     "publishConfig": {

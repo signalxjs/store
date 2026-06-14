@@ -83,6 +83,36 @@ const Profile = component(() => {
 });
 ```
 
+## Server-side rendering
+
+`ssrState()` transfers a store's state from the server render to client
+hydration — fetch/compute once on the server, never refetch in the browser:
+
+```ts
+import { defineStore } from '@sigx/store';
+import { ssrState } from '@sigx/store/ssr';
+
+const useCart = defineStore('cart', (ctx) => {
+    const { state, signals, patch } = ctx.defineState({ items: [] as string[], total: 0 });
+    ssrState(ctx, { state, patch });          // ← one line
+    return { ...signals };
+});
+```
+
+- **Server**: the slice serializes into the page's `window.__SIGX_ASYNC__`
+  blob under `store:cart` — emitted automatically by `renderDocument`
+  (or `createSSR().use(stateSerializationPlugin())`). Serialization happens
+  at emit time, so state mutated during the request ships with final values.
+- **Client**: the store seeds from the blob as one atomic `patch()`
+  (consume-once — a second instance starts from defaults). Returns
+  `{ hydrated }` if you need to know.
+- `pick: ['items']` limits which keys cross the wire.
+- Composes with `persist()`: call `ssrState` first — persist's hydration
+  then overrides with device-local data when present.
+
+Requires `sigx`/`@sigx/server-renderer` >= 0.6.0 on the server. This module
+itself has no server-renderer dependency — pure stores stay pure.
+
 ## License
 
 [MIT](https://github.com/signalxjs/store/blob/main/LICENSE)

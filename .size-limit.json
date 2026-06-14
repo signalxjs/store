@@ -8,5 +8,10 @@
     "name": "@sigx/store/persist",
     "path": "packages/store/dist/persist.js",
     "limit": "4 KB"
+  },
+  {
+    "name": "@sigx/store/ssr",
+    "path": "packages/store/dist/ssr.js",
+    "limit": "2 KB"
   }
 ]

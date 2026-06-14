@@ -93,7 +93,7 @@ import { defineStore } from '@sigx/store';
 import { ssrState } from '@sigx/store/ssr';
 
 const useCart = defineStore('cart', (ctx) => {
-    const { state, signals, patch } = ctx.defineState({ items: [], total: 0 });
+    const { state, signals, patch } = ctx.defineState({ items: [] as string[], total: 0 });
     ssrState(ctx, { state, patch });          // ← one line
     return { ...signals };
 });

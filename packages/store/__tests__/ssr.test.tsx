@@ -19,6 +19,7 @@ const nextName = () => `ssrStore_${++storeCounter}`;
 
 afterEach(() => {
     delete (globalThis as any).__SIGX_ASYNC__;
+    if (typeof window !== 'undefined') delete (window as any).__SIGX_ASYNC__;
 });
 
 function makeCartStore(name: string, opts?: { pick?: any }) {
@@ -134,6 +135,17 @@ describe('ssrState — client seeding', () => {
         const cart = makeCartStore(name)() as any;
         expect(cart.items).toEqual([]);
         expect(cart.$ssr.hydrated).toBe(false);
+    });
+
+    it('seeds from window.__SIGX_ASYNC__ (the surface the server emits)', () => {
+        const name = nextName();
+        // The server writes `window.__SIGX_ASYNC__=…`; reading must find it
+        // there even when `window` is not the same object as `globalThis`.
+        (window as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: ['from-window'] } };
+
+        const cart = makeCartStore(name)() as any;
+        expect(cart.items).toEqual(['from-window']);
+        expect(cart.$ssr.hydrated).toBe(true);
     });
 
     it('ignores non-object seeds defensively', () => {

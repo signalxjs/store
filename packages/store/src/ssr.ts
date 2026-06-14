@@ -133,7 +133,10 @@ export function ssrState<TState extends object>(
     if (typeof window === 'undefined') {
         return { hydrated: false };
     }
-    const blob = (globalThis as any).__SIGX_ASYNC__;
+    // Read from `window` to match the server's `window.__SIGX_ASYNC__=` emit;
+    // fall back to `globalThis` for nonstandard setups where the two differ
+    // (in a real browser they're the same object).
+    const blob = (window as any).__SIGX_ASYNC__ ?? (globalThis as any).__SIGX_ASYNC__;
     if (blob && Object.prototype.hasOwnProperty.call(blob, key)) {
         const seed = blob[key];
         delete blob[key];

@@ -32,6 +32,7 @@ const serverInstanceWithoutResults = { ssr: { isServer: true, _ctx: {} } };
 afterEach(() => {
     delete (globalThis as any).__SIGX_ASYNC__;
     currentInstance.mockReset();
+    vi.unstubAllGlobals();
 });
 
 describe('ssrState — server without a usable render context', () => {
@@ -52,6 +53,25 @@ describe('ssrState — server without a usable render context', () => {
         expect(store.$ssr.hydrated).toBe(false);                                  // did not seed
         expect(store.items).toEqual([]);                                          // defaults preserved
         expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(true); // blob untouched (not consumed)
+    });
+
+    it('outside component resolution (no instance, non-DOM) does not seed from the global blob', () => {
+        const name = nextName();
+        currentInstance.mockReturnValue(null); // not in a render → no ssr signal to detect
+        (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: ['leak'] } };
+        vi.stubGlobal('window', undefined);    // non-DOM server environment
+
+        const useStore = defineStore(name, (ctx) => {
+            const { state, signals, patch } = ctx.defineState({ items: [] as string[] });
+            const handle = ssrState(ctx, { state, patch });
+            return { ...signals, $ssr: handle };
+        }, 'transient');
+
+        const store = useStore() as any;
+
+        expect(store.$ssr.hydrated).toBe(false);                                  // did not seed
+        expect(store.items).toEqual([]);                                          // defaults preserved
+        expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(true); // blob untouched
     });
 
     it('dev-warns that the on-server state cannot be serialized', () => {

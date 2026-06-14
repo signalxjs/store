@@ -124,6 +124,15 @@ export function ssrState<TState extends object>(
     }
 
     // ── Client: seed from the blob (consume-once) ──────────────────────
+    // Gate seeding behind a browser-like global. The `ssr.isServer` check
+    // above is the primary server signal, but a store created on the server
+    // *outside* component resolution has no instance to detect — without this
+    // guard it would fall through and read the blob from `globalThis`, which
+    // in a long-lived Node process is shared across requests. The blob is
+    // emitted as `window.__SIGX_ASYNC__`, so its absence means "not a browser".
+    if (typeof window === 'undefined') {
+        return { hydrated: false };
+    }
     const blob = (globalThis as any).__SIGX_ASYNC__;
     if (blob && Object.prototype.hasOwnProperty.call(blob, key)) {
         const seed = blob[key];

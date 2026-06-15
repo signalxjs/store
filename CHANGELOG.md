@@ -4,6 +4,10 @@ All notable changes to `@sigx/store`. The package also keeps a per-package `pack
 
 ## [Unreleased]
 
+### Changed
+
+- **`@sigx/store`**: support `@sigx/reactivity` and `@sigx/runtime-core` `0.7.0` — peer range widened from `>=0.5.0 <0.7.0` to `>=0.5.0 <0.8.0` (#50). Core 0.7.0's breaking changes (slot-presence semantics; removal of the deprecated flat `Define*` type aliases) don't touch the store, which imports only stable reactivity/runtime-core symbols. Dev dependencies bumped to `^0.7.0` and verified with typecheck, tests and build against 0.7.0.
+
 ## 0.7.0 — 2026-06-14
 
 ### Added

@@ -42,20 +42,20 @@ importers:
   packages/store:
     devDependencies:
       '@sigx/reactivity':
-        specifier: ^0.6.3
-        version: 0.6.3
+        specifier: ^0.7.0
+        version: 0.7.0
       '@sigx/runtime-core':
-        specifier: ^0.6.3
-        version: 0.6.3
+        specifier: ^0.7.0
+        version: 0.7.0
       '@sigx/server-renderer':
-        specifier: ^0.6.3
-        version: 0.6.3
+        specifier: ^0.7.0
+        version: 0.7.0
       '@types/node':
         specifier: ^25.9.1
         version: 25.9.3
       sigx:
-        specifier: ^0.6.3
-        version: 0.6.3
+        specifier: ^0.7.0
+        version: 0.7.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -487,20 +487,20 @@ packages:
   '@rolldown/pluginutils@1.0.0-rc.18':
     resolution: {integrity: sha512-CUY5Mnhe64xQBGZEEXQ5WyZwsc1JU3vAZLIxtrsBt3LO6UOb+C8GunVKqe9sT8NeWb4lqSaoJtp2xo6GxT1MNw==}
 
-  '@sigx/reactivity@0.6.3':
-    resolution: {integrity: sha512-YJOxBxaDY3EoyckTo5m2bYRpBupQN5gmMYBc+v/fCzx50NC13KnDOUlkpNZ6CNOcrZpWSp/RrVOYdmuXyczI1Q==}
+  '@sigx/reactivity@0.7.0':
+    resolution: {integrity: sha512-EnsRi5j49qf8Bp8AB1PUenqwQcU0ekopxAkKLSgJIFnJwWhMczj/WX5m9dxKeXbMtGYoM54poqaXtvey0efGag==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@sigx/runtime-core@0.6.3':
-    resolution: {integrity: sha512-g148a1uWxDdOYtYuioQpcxiEJCF3LJ3cPa4Rne5FChijlQqgkeq1sTMpMmNQieRGgtjZmomE0gFhSkrABdzMsQ==}
+  '@sigx/runtime-core@0.7.0':
+    resolution: {integrity: sha512-33OzDnmA1xe1xUGIZ4JAYQuPnlvq92CTzNbYu5fBi5pLLtWuAYi+CNeMXr80J6XU98BrMaaAJg3wU3nUWUQbKg==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@sigx/runtime-dom@0.6.3':
-    resolution: {integrity: sha512-j6dneqy4WK0vyG6E7qwn5dV2jNMovbNM/gMhcjUCRM4qGAH1RB1VwAwh8Ng1it+yJgTL5+7uX2B7Rapb1BIZYw==}
+  '@sigx/runtime-dom@0.7.0':
+    resolution: {integrity: sha512-6lk9q0R4cwvRNOivGDyL5Wfb7nbrqLJZMJ18bvkIUYUKjxWo2DZQ2B7eK0zZtdLrikHAjYVQIlU1iJsQL6s6JA==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@sigx/server-renderer@0.6.3':
-    resolution: {integrity: sha512-PuW716KJ52+YEam+mvR9ZAkfuk5v0wcX6W5grcGKwbpFkI8Sfl/RPoT5ozpkzS5viokcTxBOqN/8XEzB153aiA==}
+  '@sigx/server-renderer@0.7.0':
+    resolution: {integrity: sha512-18XWKKb0OgnpF+IJ+u0QDl4OpAgsnUFScJN6v2fOQl8k2C/Juaoc9KQxjA3VaRzw3jrNYZ5yoymysy/tBCnlxQ==}
 
   '@size-limit/esbuild@11.2.0':
     resolution: {integrity: sha512-vSg9H0WxGQPRzDnBzeDyD9XT0Zdq0L+AI3+77/JhxznbSCMJMMr8ndaWVQRhOsixl97N0oD4pRFw2+R1Lcvi6A==}
@@ -862,8 +862,8 @@ packages:
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
 
-  sigx@0.6.3:
-    resolution: {integrity: sha512-xILJJZJ8cpYi5SIqYjBq1lPXbfbW78jizubU5IbQzWp9Fl7zwNPpVFdubGdyQ6he52doz+JuuVQZKhcZg9lvMQ==}
+  sigx@0.7.0:
+    resolution: {integrity: sha512-g0GzrN38rb+sUHQxB64Lt2b2FUYr4c7zrqKNizkOxrGCsP0RbhNARMAkC6fmL8OumPW9/YAi90bq2BH2I+b24Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   size-limit@11.2.0:
@@ -1253,20 +1253,20 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.0-rc.18': {}
 
-  '@sigx/reactivity@0.6.3': {}
+  '@sigx/reactivity@0.7.0': {}
 
-  '@sigx/runtime-core@0.6.3':
+  '@sigx/runtime-core@0.7.0':
     dependencies:
-      '@sigx/reactivity': 0.6.3
+      '@sigx/reactivity': 0.7.0
 
-  '@sigx/runtime-dom@0.6.3':
+  '@sigx/runtime-dom@0.7.0':
     dependencies:
-      '@sigx/reactivity': 0.6.3
-      '@sigx/runtime-core': 0.6.3
+      '@sigx/reactivity': 0.7.0
+      '@sigx/runtime-core': 0.7.0
 
-  '@sigx/server-renderer@0.6.3':
+  '@sigx/server-renderer@0.7.0':
     dependencies:
-      sigx: 0.6.3
+      sigx: 0.7.0
 
   '@size-limit/esbuild@11.2.0(size-limit@11.2.0)':
     dependencies:
@@ -1631,11 +1631,11 @@ snapshots:
 
   siginfo@2.0.0: {}
 
-  sigx@0.6.3:
+  sigx@0.7.0:
     dependencies:
-      '@sigx/reactivity': 0.6.3
-      '@sigx/runtime-core': 0.6.3
-      '@sigx/runtime-dom': 0.6.3
+      '@sigx/reactivity': 0.7.0
+      '@sigx/runtime-core': 0.7.0
+      '@sigx/runtime-dom': 0.7.0
 
   size-limit@11.2.0:
     dependencies:

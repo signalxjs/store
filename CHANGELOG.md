@@ -4,6 +4,11 @@ All notable changes to `@sigx/store`. The package also keeps a per-package `pack
 
 ## [Unreleased]
 
+### Changed
+
+- **`@sigx/store`**: `ssrState()` now gates client seeding on core's `isLiveClient()` (from `@sigx/runtime-core/internals`) instead of a bare `typeof window` check, and reads the transfer blob windowless-safely (`globalThis` fallback, `window` referenced only when it exists). Behavior is identical on web and SSR — `isLiveClient()` defaults to the browser check — but windowless client runtimes (e.g. lynx, terminal) that declare themselves live now seed instead of silently no-op'ing (#58).
+- **`@sigx/store`** (docs only): documented that `onStoreCreated`'s plugin registry and the internal per-instance counter are intentionally process-global; under SSR the plugin hook applies to every app/request (register once at startup) and the monotonic counter keeps concurrent requests' topic namespaces distinct — an audit confirmed neither is a per-request leak, so no `defineInjectable` change was warranted (#58).
+
 ## 0.8.0 — 2026-07-16
 
 ### Changed

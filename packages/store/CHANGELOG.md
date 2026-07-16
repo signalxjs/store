@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-16
+
 ### Changed
 
+- Support `@sigx/reactivity` and `@sigx/runtime-core` `0.10.0` — peer range widened from `>=0.5.0 <0.8.0` to `>=0.5.0 <0.11.0` (#56). Core's `0.8`/`0.9`/`0.10` breaking changes (TypeScript 7 migration; retiring `Suspense`/`ErrorBoundary` for the value-first async model; DI token seams; the new SSR boundary model) don't touch the store, which imports only stable reactivity/runtime-core symbols and the SSR state-transfer contract (`getCurrentInstance`, the per-request `_asyncResults` map, `window.__SIGX_ASYNC__` via `stateSerializationPlugin`) that core still ships. Dev dependencies (`@sigx/reactivity`, `@sigx/runtime-core`, `@sigx/server-renderer`, `sigx`) bumped to `^0.10.0`; verified with typecheck, tests and build against 0.10.0.
 - Support `@sigx/reactivity` and `@sigx/runtime-core` `0.7.0` — peer range widened from `>=0.5.0 <0.7.0` to `>=0.5.0 <0.8.0` (#50). Core 0.7.0's breaking changes (slot-presence semantics; removal of the deprecated flat `Define*` type aliases) don't touch the store, which imports only stable reactivity/runtime-core symbols. Dev dependencies (`@sigx/reactivity`, `@sigx/runtime-core`, `@sigx/server-renderer`, `sigx`) bumped to `^0.7.0`; verified with typecheck, tests and build against 0.7.0.
 
 ## [0.7.0] - 2026-06-14

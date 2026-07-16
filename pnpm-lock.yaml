@@ -42,20 +42,20 @@ importers:
   packages/store:
     devDependencies:
       '@sigx/reactivity':
-        specifier: ^0.7.0
-        version: 0.7.0
+        specifier: ^0.10.0
+        version: 0.10.0
       '@sigx/runtime-core':
-        specifier: ^0.7.0
-        version: 0.7.0
+        specifier: ^0.10.0
+        version: 0.10.0
       '@sigx/server-renderer':
-        specifier: ^0.7.0
-        version: 0.7.0
+        specifier: ^0.10.0
+        version: 0.10.0
       '@types/node':
         specifier: ^25.9.1
         version: 25.9.3
       sigx:
-        specifier: ^0.7.0
-        version: 0.7.0
+        specifier: ^0.10.0
+        version: 0.10.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -487,20 +487,20 @@ packages:
   '@rolldown/pluginutils@1.0.0-rc.18':
     resolution: {integrity: sha512-CUY5Mnhe64xQBGZEEXQ5WyZwsc1JU3vAZLIxtrsBt3LO6UOb+C8GunVKqe9sT8NeWb4lqSaoJtp2xo6GxT1MNw==}
 
-  '@sigx/reactivity@0.7.0':
-    resolution: {integrity: sha512-EnsRi5j49qf8Bp8AB1PUenqwQcU0ekopxAkKLSgJIFnJwWhMczj/WX5m9dxKeXbMtGYoM54poqaXtvey0efGag==}
+  '@sigx/reactivity@0.10.0':
+    resolution: {integrity: sha512-vjNxN3b4er4nB6ysB0JU0CVzqy++12zBhUcSmKhaMYHxW1/KL5EiN8ZoDIAtAIOpZAAMlZaATLDlUQFWET1kgQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@sigx/runtime-core@0.7.0':
-    resolution: {integrity: sha512-33OzDnmA1xe1xUGIZ4JAYQuPnlvq92CTzNbYu5fBi5pLLtWuAYi+CNeMXr80J6XU98BrMaaAJg3wU3nUWUQbKg==}
+  '@sigx/runtime-core@0.10.0':
+    resolution: {integrity: sha512-gwS+GAUXzianwxKDYXInN/Ju7zd9gS8zoeenBi5JPNOisn72YP1tNfDBx4kkc5DI7x2JhtsR3XFF70nlBSNtyg==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@sigx/runtime-dom@0.7.0':
-    resolution: {integrity: sha512-6lk9q0R4cwvRNOivGDyL5Wfb7nbrqLJZMJ18bvkIUYUKjxWo2DZQ2B7eK0zZtdLrikHAjYVQIlU1iJsQL6s6JA==}
+  '@sigx/runtime-dom@0.10.0':
+    resolution: {integrity: sha512-wc3qMyAzYE5vlgS3FzB+3lFyq2rTXpzVSbor6mfVHYBxcZfPLyDTn+HSaXWqq7cWvYSC541p72NO2MifJmK2bA==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@sigx/server-renderer@0.7.0':
-    resolution: {integrity: sha512-18XWKKb0OgnpF+IJ+u0QDl4OpAgsnUFScJN6v2fOQl8k2C/Juaoc9KQxjA3VaRzw3jrNYZ5yoymysy/tBCnlxQ==}
+  '@sigx/server-renderer@0.10.0':
+    resolution: {integrity: sha512-NljFHj3tiFFsSW0vP6j/aeYobbT8QvWkZCPsV07fA6ePFHGS0oakpy+eTn23jk3KUkPee/3jme9QXv77VRK2MQ==}
 
   '@size-limit/esbuild@11.2.0':
     resolution: {integrity: sha512-vSg9H0WxGQPRzDnBzeDyD9XT0Zdq0L+AI3+77/JhxznbSCMJMMr8ndaWVQRhOsixl97N0oD4pRFw2+R1Lcvi6A==}
@@ -862,8 +862,8 @@ packages:
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
 
-  sigx@0.7.0:
-    resolution: {integrity: sha512-g0GzrN38rb+sUHQxB64Lt2b2FUYr4c7zrqKNizkOxrGCsP0RbhNARMAkC6fmL8OumPW9/YAi90bq2BH2I+b24Q==}
+  sigx@0.10.0:
+    resolution: {integrity: sha512-HOtqdZRc8/omp0heew0y/vfOVtXHsY/uUDZbexJeAIkNNQgUB2yzfrpWsNzFWACLF3gAj9MCsmnVPimx7dfBeg==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   size-limit@11.2.0:
@@ -1253,20 +1253,20 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.0-rc.18': {}
 
-  '@sigx/reactivity@0.7.0': {}
+  '@sigx/reactivity@0.10.0': {}
 
-  '@sigx/runtime-core@0.7.0':
+  '@sigx/runtime-core@0.10.0':
     dependencies:
-      '@sigx/reactivity': 0.7.0
+      '@sigx/reactivity': 0.10.0
 
-  '@sigx/runtime-dom@0.7.0':
+  '@sigx/runtime-dom@0.10.0':
     dependencies:
-      '@sigx/reactivity': 0.7.0
-      '@sigx/runtime-core': 0.7.0
+      '@sigx/reactivity': 0.10.0
+      '@sigx/runtime-core': 0.10.0
 
-  '@sigx/server-renderer@0.7.0':
+  '@sigx/server-renderer@0.10.0':
     dependencies:
-      sigx: 0.7.0
+      sigx: 0.10.0
 
   '@size-limit/esbuild@11.2.0(size-limit@11.2.0)':
     dependencies:
@@ -1631,11 +1631,11 @@ snapshots:
 
   siginfo@2.0.0: {}
 
-  sigx@0.7.0:
+  sigx@0.10.0:
     dependencies:
-      '@sigx/reactivity': 0.7.0
-      '@sigx/runtime-core': 0.7.0
-      '@sigx/runtime-dom': 0.7.0
+      '@sigx/reactivity': 0.10.0
+      '@sigx/runtime-core': 0.10.0
+      '@sigx/runtime-dom': 0.10.0
 
   size-limit@11.2.0:
     dependencies:

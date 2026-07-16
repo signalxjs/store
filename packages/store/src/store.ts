@@ -507,6 +507,12 @@ const storePlugins = new Set<(ctx: StorePluginContext) => void>();
  * its setup returns. Plugins run in registration order; a throwing plugin is
  * isolated and cannot break store creation. Returns a Subscription whose
  * unsubscribe stops future invocations.
+ *
+ * SSR note: the registry is module-global (process-wide), by design — like a
+ * global middleware hook. Under server rendering it therefore applies to every
+ * app and every request in the process, not per request. Register plugins once
+ * at startup; don't register per request. This is intentional, not an injectable
+ * per-app service (see the `instanceCounters` note below for the same rationale).
  */
 export function onStoreCreated(plugin: (ctx: StorePluginContext) => void): Subscription {
     storePlugins.add(plugin);
@@ -521,6 +527,15 @@ export function onStoreCreated(plugin: (ctx: StorePluginContext) => void): Subsc
 // defineStore
 // ============================================================================
 
+// Per-store-name monotonic instance counter, module-global (process-wide) ON
+// PURPOSE. The `name#count` id it mints feeds each instance's topic namespaces
+// (`${id}.events`, action topics), which register in core's global topic
+// registry. A shared per-process counter keeps concurrent instances — including
+// concurrent SSR requests in one Node process — on distinct ids, so their topic
+// namespaces never collide in that registry. Resetting it per request would be
+// unsafe (two in-flight requests could both mint `name#1`). The count never
+// reaches the client: the SSR transfer key is `store:<storeName>`, not the id,
+// so unbounded growth is cosmetic. This is deliberately NOT a per-app injectable.
 const instanceCounters = new Map<string, number>();
 
 /**

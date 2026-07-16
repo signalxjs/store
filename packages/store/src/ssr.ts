@@ -31,6 +31,7 @@
  */
 
 import { getCurrentInstance } from "@sigx/runtime-core";
+import { isLiveClient } from "@sigx/runtime-core/internals";
 import type { Patch, SetupStoreContext } from "./store.js";
 
 export interface SSRStateOptions<TState extends object> {
@@ -124,19 +125,24 @@ export function ssrState<TState extends object>(
     }
 
     // ── Client: seed from the blob (consume-once) ──────────────────────
-    // Gate seeding behind a browser-like global. The `ssr.isServer` check
+    // Gate seeding behind the live-client signal. The `ssr.isServer` check
     // above is the primary server signal, but a store created on the server
     // *outside* component resolution has no instance to detect — without this
     // guard it would fall through and read the blob from `globalThis`, which
-    // in a long-lived Node process is shared across requests. The blob is
-    // emitted as `window.__SIGX_ASYNC__`, so its absence means "not a browser".
-    if (typeof window === 'undefined') {
+    // in a long-lived Node process is shared across requests. `isLiveClient()`
+    // is the browser check (`typeof window !== 'undefined'`) by default, so web
+    // and SSR are unchanged; windowless client runtimes (lynx, terminal) that
+    // declare themselves live now seed instead of silently no-op'ing.
+    if (!isLiveClient()) {
         return { hydrated: false };
     }
     // Read from `window` to match the server's `window.__SIGX_ASYNC__=` emit;
-    // fall back to `globalThis` for nonstandard setups where the two differ
-    // (in a real browser they're the same object).
-    const blob = (window as any).__SIGX_ASYNC__ ?? (globalThis as any).__SIGX_ASYNC__;
+    // fall back to `globalThis` for windowless live clients and nonstandard
+    // setups where the two differ (in a real browser they're the same object).
+    // `window` is referenced only when it exists — a bare `window` read throws
+    // on windowless runtimes.
+    const scope: any = typeof window !== 'undefined' ? window : globalThis;
+    const blob = scope.__SIGX_ASYNC__ ?? (globalThis as any).__SIGX_ASYNC__;
     if (blob && Object.prototype.hasOwnProperty.call(blob, key)) {
         const seed = blob[key];
         delete blob[key];

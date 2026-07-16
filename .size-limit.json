@@ -1,19 +1,19 @@
 [
   {
     "name": "@sigx/store",
-    "path": "packages/store/dist/index.js",
+    "path": "packages/store/dist/index.prod.js",
     "limit": "10 KB",
     "ignore": ["@sigx/reactivity", "@sigx/runtime-core", "@sigx/server-renderer", "sigx"]
   },
   {
     "name": "@sigx/store/persist",
-    "path": "packages/store/dist/persist.js",
+    "path": "packages/store/dist/persist.prod.js",
     "limit": "4 KB",
     "ignore": ["@sigx/reactivity", "@sigx/runtime-core", "@sigx/server-renderer", "sigx"]
   },
   {
     "name": "@sigx/store/ssr",
-    "path": "packages/store/dist/ssr.js",
+    "path": "packages/store/dist/ssr.prod.js",
     "limit": "2 KB",
     "ignore": ["@sigx/reactivity", "@sigx/runtime-core", "@sigx/server-renderer", "sigx"]
   }

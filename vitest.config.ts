@@ -2,6 +2,11 @@ import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
 
 export default defineConfig({
+    // `__DEV__` is the compile-time dev flag package sources guard on; the build
+    // (vite.config.ts) replaces it in the dists, so tests must define it too.
+    define: {
+        __DEV__: 'true'
+    },
     oxc: {
         jsx: {
             runtime: 'automatic',

@@ -94,7 +94,7 @@ export function ssrState<TState extends object>(
     // throwing inside a store setup.
     const results = renderCtx?._asyncResults;
     if (results && typeof results.set === 'function') {
-        if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production' && typeof results.has === 'function' && results.has(key)) {
+        if (__DEV__ && typeof results.has === 'function' && results.has(key)) {
             console.warn(
                 `[@sigx/store] ssrState: "${ctx.storeName}" registered twice in one request — ` +
                 `the serialized state would be last-write-wins. One store ` +
@@ -115,7 +115,7 @@ export function ssrState<TState extends object>(
     // can exist as a Node global shared across requests, which would patch
     // server-side state from another request's blob.
     if (instance?.ssr?.isServer) {
-        if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
+        if (__DEV__) {
             console.warn(
                 `[@sigx/store] ssrState: "${ctx.storeName}" was created on the server outside ` +
                 `a render context — its state cannot be serialized for hydration.`

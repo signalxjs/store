@@ -7,24 +7,30 @@
     "types": "./dist/index.d.ts",
     "exports": {
         ".": {
-            "import": "./dist/index.js",
-            "types": "./dist/index.d.ts"
+            "types": "./dist/index.d.ts",
+            "development": "./dist/index.js",
+            "production": "./dist/index.prod.js",
+            "import": "./dist/index.js"
         },
         "./persist": {
-            "import": "./dist/persist.js",
-            "types": "./dist/persist.d.ts"
+            "types": "./dist/persist.d.ts",
+            "development": "./dist/persist.js",
+            "production": "./dist/persist.prod.js",
+            "import": "./dist/persist.js"
         },
         "./ssr": {
-            "import": "./dist/ssr.js",
-            "types": "./dist/ssr.d.ts"
+            "types": "./dist/ssr.d.ts",
+            "development": "./dist/ssr.js",
+            "production": "./dist/ssr.prod.js",
+            "import": "./dist/ssr.js"
         }
     },
     "files": [
         "dist"
     ],
     "scripts": {
-        "build": "tsgo",
-        "dev": "tsgo --watch"
+        "build": "vite build && vite build --mode prod-dist && tsc --emitDeclarationOnly",
+        "dev": "vite build --watch"
     },
     "keywords": [
         "sigx",
@@ -47,9 +53,11 @@
         "@sigx/reactivity": "^0.10.0",
         "@sigx/runtime-core": "^0.10.0",
         "@sigx/server-renderer": "^0.10.0",
+        "@sigx/vite": "^0.10.0",
         "@types/node": "^25.9.1",
         "sigx": "^0.10.0",
-        "typescript": "^6.0.3"
+        "typescript": "^6.0.3",
+        "vite": "^8.0.3"
     },
     "publishConfig": {
         "access": "public"

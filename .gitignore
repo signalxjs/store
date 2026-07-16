@@ -10,6 +10,9 @@ docs/dist/
 *.d.ts
 *.d.ts.map
 !packages/runtime-core/src/jsx-types.d.ts
+# Hand-authored source .d.ts (ambient decls) live under src/ and must be tracked
+# — only built .d.ts under dist/ are outputs.
+!packages/store/src/**/*.d.ts
 *.js
 *.js.map
 

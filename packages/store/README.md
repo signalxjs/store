@@ -110,8 +110,11 @@ const useCart = defineStore('cart', (ctx) => {
 - Composes with `persist()`: call `ssrState` first — persist's hydration
   then overrides with device-local data when present.
 
-Requires `sigx`/`@sigx/server-renderer` >= 0.6.0 on the server. This module
-itself has no server-renderer dependency — pure stores stay pure.
+Requires `sigx`/`@sigx/server-renderer` on the `0.12.x` core line on the
+server — matching the single core minor this package pins for
+`@sigx/reactivity`/`@sigx/runtime-core` in its `peerDependencies` (`^0.12.0`);
+the sigx framework moves together, one minor at a time. This module itself has
+no server-renderer dependency — pure stores stay pure.
 
 ## License
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-18
+
 ### Changed (breaking)
 
 - Migrated to sigx core **`0.12.0`** and **narrowed** the peer range to a single minor: `@sigx/reactivity`/`@sigx/runtime-core` are now `^0.12.0`, down from the widened `>=0.5.0 <0.11.0` band accumulated across #50/#56. Store imports only stable low-level symbols (`signal`/`watch`/`batch`/`untrack`/`computed`/`isComputed`, Topic v2, `defineFactory`, `getCurrentInstance`, `isLiveClient`/`declareLiveClient`) plus the SSR state-transfer contract (`stateSerializationPlugin`, `window.__SIGX_ASYNC__`), none of which changed across 0.10→0.12 — verified with typecheck, tests and build against 0.12.0. The single-minor pin restores core's single-copy guarantee the widened band gave up (a second `@sigx/reactivity` copy silently splits core's module-local singletons). Install alongside the same core minor: `npm i @sigx/store @sigx/runtime-core@^0.12.0 @sigx/reactivity@^0.12.0`. (#64)

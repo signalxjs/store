@@ -1,6 +1,6 @@
 {
     "name": "@sigx/store",
-    "version": "0.8.0",
+    "version": "0.9.0",
     "description": "Store framework for SignalX - State management abstraction",
     "type": "module",
     "main": "./dist/index.js",

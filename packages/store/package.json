@@ -50,12 +50,12 @@
         "url": "https://github.com/signalxjs/store/issues"
     },
     "devDependencies": {
-        "@sigx/reactivity": "^0.10.0",
-        "@sigx/runtime-core": "^0.10.0",
-        "@sigx/server-renderer": "^0.10.0",
-        "@sigx/vite": "^0.10.0",
+        "@sigx/reactivity": "catalog:",
+        "@sigx/runtime-core": "catalog:",
+        "@sigx/server-renderer": "catalog:",
+        "@sigx/vite": "catalog:",
         "@types/node": "^25.9.1",
-        "sigx": "^0.10.0",
+        "sigx": "catalog:",
         "typescript": "^6.0.3",
         "vite": "^8.0.3"
     },
@@ -63,7 +63,7 @@
         "access": "public"
     },
     "peerDependencies": {
-        "@sigx/reactivity": ">=0.5.0 <0.11.0",
-        "@sigx/runtime-core": ">=0.5.0 <0.11.0"
+        "@sigx/reactivity": "catalog:",
+        "@sigx/runtime-core": "catalog:"
     }
 }

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-23
+
 ### Changed
 
 - Migrated to sigx core **`0.13.0`**: the `catalog:` pins for `@sigx/reactivity`/`@sigx/runtime-core`/`@sigx/server-renderer`/`@sigx/vite`/`sigx` move from `^0.12.0` to `^0.13.0`. Verified with typecheck, tests and build against 0.13.0.

@@ -185,6 +185,22 @@ describe('ssrState — client seeding', () => {
         expect((useCart() as any).items).toEqual(['a']);
     });
 
+    it('treats a sparse array as not JSON-copyable (holes serialize as null)', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const name = nextName();
+        const sparse: string[] = [];
+        sparse[2] = 'third';                       // holes at 0 and 1
+        (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: sparse } };
+        vi.stubGlobal('structuredClone', undefined);
+
+        makeCartStore(name)();
+
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining(`"${name}" could not copy its server seed`)
+        );
+        warn.mockRestore();
+    });
+
     it('shares a rich seed by reference rather than flattening it through JSON', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const name = nextName();

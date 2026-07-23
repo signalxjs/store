@@ -133,6 +133,15 @@ function isPlainSeed(seed: unknown): seed is Record<string, unknown> {
  * "no": `Date`/`Map`/`Set`/`RegExp` and other non-plain objects (which is what
  * the codec produces), `bigint`, `undefined` and functions (dropped or turned
  * to `null`), non-finite numbers (`null`), and cycles (a throw).
+ *
+ * It walks own property DESCRIPTORS rather than values, because descriptors are
+ * what make the lossy shapes visible: an accessor, a non-enumerable property, a
+ * symbol key and an array hole are each dropped or rewritten by
+ * `JSON.stringify`, and an `Object.values()` walk waves all four through — the
+ * array hole is the one that survives to here in practice, since a blob seed
+ * reaches us via the codec, which rebuilds objects and normalizes the other
+ * three away. Descriptors also invoke no getter, keeping this consistent with
+ * `isPlainSeed`, which reads nothing off a seed at all.
  */
 function isJsonSafe(value: unknown, seen: Set<object>): boolean {
     if (value === null) return true;
@@ -145,11 +154,33 @@ function isJsonSafe(value: unknown, seen: Set<object>): boolean {
     if (seen.has(object)) return false;
     seen.add(object);
 
-    if (Array.isArray(object)) return object.every(item => isJsonSafe(item, seen));
-
     const proto = Object.getPrototypeOf(object);
-    if (proto !== Object.prototype && proto !== null) return false;
-    return Object.values(object).every(item => isJsonSafe(item, seen));
+    const isArray = Array.isArray(object);
+    if (!isArray && proto !== Object.prototype && proto !== null) return false;
+    if (isArray && proto !== Array.prototype) return false;
+    // Symbol keys never survive JSON.
+    if (Object.getOwnPropertySymbols(object).length > 0) return false;
+
+    const descriptors = Object.getOwnPropertyDescriptors(object);
+    const length = isArray ? (object as unknown[]).length : 0;
+    let indices = 0;
+
+    for (const key of Object.getOwnPropertyNames(object)) {
+        if (isArray && key === 'length') continue;
+        if (isArray) {
+            // Only canonical indices — an array's extra named properties are
+            // dropped by JSON.
+            if (String(Number(key)) !== key) return false;
+            indices++;
+        }
+        const descriptor = descriptors[key]!;
+        // `value` absent ⇒ accessor: reading it is exactly what we won't do.
+        if (!('value' in descriptor) || !descriptor.enumerable) return false;
+        if (!isJsonSafe(descriptor.value, seen)) return false;
+    }
+
+    // A hole serializes as null, so a sparse array is not copyable this way.
+    return !isArray || indices === length;
 }
 
 /**

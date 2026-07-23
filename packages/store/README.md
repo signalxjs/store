@@ -101,18 +101,34 @@ const useCart = defineStore('cart', (ctx) => {
 
 - **Server**: the slice serializes into the page's `window.__SIGX_ASYNC__`
   blob under `store:cart` — emitted automatically by `renderDocument`
-  (or `createSSR().use(stateSerializationPlugin())`). Serialization happens
-  at emit time, so state mutated during the request ships with final values.
-- **Client**: the store seeds from the blob as one atomic `patch()`
-  (consume-once — a second instance starts from defaults). Returns
-  `{ hydrated }` if you need to know.
+  (or `createSSR({ plugins: [stateSerializationPlugin()] })`). Serialization
+  happens at emit time, so state mutated during the request ships with final
+  values, and a store first resolved below a streamed boundary ships in that
+  boundary's chunk rather than being dropped.
+- **Client**: the store seeds from the blob as one atomic `patch()`, and the
+  entry **stays** — every instance of the store created in that client runtime
+  seeds from it, each with its own structural copy. Returns `{ hydrated }` if
+  you need to know. Rich values (`Date`, `Map`, `Set`, `BigInt`) round-trip:
+  the read goes through core's blob accessors, so store seeds get the same
+  codec `useData` and `@sigx/cache` do. (The per-instance copy uses
+  `structuredClone`, which preserves them. On a runtime without it, a value
+  JSON cannot represent exactly is shared by reference rather than flattened —
+  with a dev warning, since a mutation in one instance would then reach the
+  others.)
 - `pick: ['items']` limits which keys cross the wire.
+- `scope: 'instance'` makes the seed consume-once instead — a later instance
+  starts from defaults. Use it when the transferred state belongs to one store
+  instance rather than to the runtime as a whole. The default (`'shared'`) is
+  what a locale + catalogs, a theme, a session or a feature-flag set wants:
+  under `@sigx/ssr-islands` each island root is its own client component tree,
+  and under `@sigx/resume` each separately-upgraded boundary can be — with
+  consume-once, everything after the first hydrates from defaults.
 - Composes with `persist()`: call `ssrState` first — persist's hydration
   then overrides with device-local data when present.
 
-Requires `sigx`/`@sigx/server-renderer` on the `0.12.x` core line on the
+Requires `sigx`/`@sigx/server-renderer` on the `0.13.x` core line on the
 server — matching the single core minor this package pins for
-`@sigx/reactivity`/`@sigx/runtime-core` in its `peerDependencies` (`^0.12.0`);
+`@sigx/reactivity`/`@sigx/runtime-core` in its `peerDependencies` (`^0.13.0`);
 the sigx framework moves together, one minor at a time. This module itself has
 no server-renderer dependency — pure stores stay pure.
 

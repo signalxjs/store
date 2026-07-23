@@ -21,22 +21,52 @@
  *   after rendering — so mutations made during the request are captured.
  *   Detection is duck-typed via the component instance's `ssr` helper; this
  *   module has NO dependency on @sigx/server-renderer.
- * - **Client**: seeds the slice from `window.__SIGX_ASYNC__['store:<name>']`
- *   as ONE atomic `patch()` (a single reactivity flush), consume-once — a
- *   later instance of the same store starts from defaults instead of
- *   forking from the seed.
+ * - **Client**: seeds the slice from the page blob as ONE atomic `patch()`
+ *   (a single reactivity flush). The entry STAYS in the blob
+ *   (`scope: 'shared'`, the default), so every instance of the store created
+ *   in this client runtime seeds from it — each with its own copy.
+ *   `scope: 'instance'` restores consume-once.
  * - Composition with `persist()`: call `ssrState` FIRST — it seeds
  *   synchronously; persist's (possibly async) hydration then overwrites
  *   with device-local data when present.
+ *
+ * Reads go through core's blob accessors (`peekRestored`/`invalidateRestored`)
+ * — THE decode point for that seam, so a slice carrying `Date`/`Map`/`Set`/
+ * `BigInt` is revived with the same codec `useData` and `@sigx/cache` get, and
+ * the store stops being the one reader in sigx that deletes what it read. Since
+ * core 0.13 (#407) those accessors gate on `isLiveClient()` and read
+ * `globalThis`, so windowless live clients (lynx, terminal) are covered by core
+ * itself — this module needs no blob access of its own.
  */
 
 import { getCurrentInstance } from "@sigx/runtime-core";
-import { isLiveClient } from "@sigx/runtime-core/internals";
+import { invalidateRestored, isLiveClient, peekRestored } from "@sigx/runtime-core/internals";
 import type { Patch, SetupStoreContext } from "./store.js";
 
 export interface SSRStateOptions<TState extends object> {
     /** Serialize (and seed) only these keys. Default: all slice keys. */
     pick?: Extract<keyof TState, string>[];
+    /**
+     * Who the transferred state belongs to. Default `'shared'`.
+     *
+     * - `'shared'` — the state describes the whole client runtime (locale +
+     *   catalogs, theme, session, feature flags), not one component. The blob
+     *   entry survives seeding, so every instance created in that runtime
+     *   starts from it: each island root is its own client component tree under
+     *   `@sigx/ssr-islands`, and each separately-upgraded boundary can be one
+     *   under `@sigx/resume`. Each instance gets a structural COPY, so one
+     *   store's mutations can never reach another's. This matches core's
+     *   `__SIGX_ASYNC__` contract — the blob is the page's data cache for its
+     *   lifetime, and `useData` / `useStream` / `@sigx/cache` all read it
+     *   without consuming.
+     * - `'instance'` — consume-once: the entry is invalidated after seeding, so
+     *   a later instance of the same store starts from defaults instead of
+     *   forking from the seed. For state that genuinely belongs to ONE store
+     *   instance — core's `docs/seams.md` names this as the shape for a pack
+     *   seed that must not outlive its instance (a refreshed boundary does not
+     *   re-deliver the blob).
+     */
+    scope?: 'shared' | 'instance';
 }
 
 export interface SSRStateHandle {
@@ -69,6 +99,90 @@ function snapshot<TState extends object>(
 }
 
 /**
+ * Is this seed a plain record — the only shape a transferred slice ever has?
+ *
+ * An array would `Object.assign` numeric keys onto the state shape. Any other
+ * exotic object (a `Date`/`Map` the codec revived from a hand-written blob
+ * entry, a class instance from a custom type handler) carries no slice keys, so
+ * patching it would report `hydrated: true` having applied nothing, and reading
+ * through it could run getters or proxy traps.
+ *
+ * The `constructor === Object` arm is not redundant: a blob entry with a literal
+ * `"__proto__"` key comes back with its PROTOTYPE swapped for that value, since
+ * the codec rebuilds objects by assignment. That is still a plain record — and
+ * `Object.prototype` itself is untouched — so it keeps hydrating, with the
+ * own-property filter deciding what of it may land on the state.
+ */
+function isPlainSeed(seed: unknown): seed is Record<string, unknown> {
+    if (!seed || typeof seed !== 'object' || Array.isArray(seed)) return false;
+    const proto = Object.getPrototypeOf(seed);
+    return proto === null || proto === Object.prototype || proto.constructor === Object;
+}
+
+/**
+ * Would a JSON round-trip lose information? Asked only on the fallback path
+ * (a runtime without `structuredClone`), so it costs nothing anywhere else.
+ *
+ * Deliberately conservative — anything JSON does not represent EXACTLY is a
+ * "no": `Date`/`Map`/`Set`/`RegExp` and other non-plain objects (which is what
+ * the codec produces), `bigint`, `undefined` and functions (dropped or turned
+ * to `null`), non-finite numbers (`null`), and cycles (a throw).
+ */
+function isJsonSafe(value: unknown, seen: Set<object>): boolean {
+    if (value === null) return true;
+    const type = typeof value;
+    if (type === 'string' || type === 'boolean') return true;
+    if (type === 'number') return Number.isFinite(value);
+    if (type !== 'object') return false;
+
+    const object = value as object;
+    if (seen.has(object)) return false;
+    seen.add(object);
+
+    if (Array.isArray(object)) return object.every(item => isJsonSafe(item, seen));
+
+    const proto = Object.getPrototypeOf(object);
+    if (proto !== Object.prototype && proto !== null) return false;
+    return Object.values(object).every(item => isJsonSafe(item, seen));
+}
+
+/**
+ * Structural copy of the seed, taken before it reaches reactive state.
+ *
+ * Under `scope: 'shared'` the blob entry outlives the seeding, so handing its
+ * nested objects to a store by reference would let that store's mutations write
+ * THROUGH the reactive proxy into the blob — and from there into every instance
+ * seeded afterwards.
+ *
+ * `structuredClone` first: it preserves what the codec revived (`Date`/`Map`/
+ * `Set`) and handles cycles. The JSON fallback, for runtimes that lack it, is
+ * used ONLY when a round-trip is lossless — flattening a revived `Date` into a
+ * string would hand the store wrong data, which is worse than sharing. Anything
+ * neither can copy is passed through by reference with a dev warning: a shared
+ * seed beats both a failed hydration and a corrupted one.
+ */
+function copySeed<T>(seed: T, storeName: string): T {
+    try {
+        if (typeof structuredClone === 'function') return structuredClone(seed);
+    } catch {
+        // Not cloneable by the structured-clone algorithm (a function, a proxy,
+        // a class instance from a custom __SIGX_TYPE_HANDLERS__ entry).
+    }
+    if (isJsonSafe(seed, new Set())) {
+        return JSON.parse(JSON.stringify(seed)) as T;
+    }
+    if (__DEV__) {
+        console.warn(
+            `[@sigx/store] ssrState: "${storeName}" could not copy its server seed — ` +
+            `it is shared by reference with any other instance seeded from the same entry, ` +
+            `so a mutation in one instance can reach the others. Use \`pick\` to transfer ` +
+            `only copyable values, or \`scope: 'instance'\`.`
+        );
+    }
+    return seed;
+}
+
+/**
  * Transfer a state slice from server render to client hydration.
  *
  * Returns `{ hydrated }` — whether a server seed was applied (always false
@@ -80,6 +194,7 @@ export function ssrState<TState extends object>(
     options: SSRStateOptions<TState> = {}
 ): SSRStateHandle {
     const key = `store:${ctx.storeName}`;
+    const scope = options.scope ?? 'shared';
 
     // ── Server: register for serialization ────────────────────────────
     // The server walk installs `ssr._ctx` (the per-request render context)
@@ -93,15 +208,20 @@ export function ssrState<TState extends object>(
     // `registerSerializedState` write path (older/alternative SSR runtimes)
     // instead of throwing inside a store setup.
     if (renderCtx && typeof renderCtx.registerSerializedState === 'function') {
+        // Only worth flagging for instance-scoped state: two instances of a
+        // SHARED store describe the same client runtime, so the entry they race
+        // to register holds the same values either way. For instance scope,
+        // last-write-wins silently picks one instance's state.
         if (
             __DEV__ &&
+            scope === 'instance' &&
             typeof renderCtx._asyncResults?.has === 'function' &&
             renderCtx._asyncResults.has(key)
         ) {
             console.warn(
                 `[@sigx/store] ssrState: "${ctx.storeName}" registered twice in one request — ` +
-                `the serialized state would be last-write-wins. One store ` +
-                `instance per name per request is the supported shape.`
+                `the serialized state is last-write-wins. With \`scope: 'instance'\`, one ` +
+                `store instance per name per request is the supported shape.`
             );
         }
         // LIVE registration: toJSON defers the snapshot to emit time (the
@@ -131,32 +251,43 @@ export function ssrState<TState extends object>(
         return { hydrated: false };
     }
 
-    // ── Client: seed from the blob (consume-once) ──────────────────────
+    // ── Client: seed from the blob ─────────────────────────────────────
     // Gate seeding behind the live-client signal. The `ssr.isServer` check
     // above is the primary server signal, but a store created on the server
     // *outside* component resolution has no instance to detect — without this
-    // guard it would fall through and read the blob from `globalThis`, which
-    // in a long-lived Node process is shared across requests. `isLiveClient()`
-    // is the browser check (`typeof window !== 'undefined'`) by default, so web
-    // and SSR are unchanged; windowless client runtimes (lynx, terminal) that
-    // declare themselves live now seed instead of silently no-op'ing.
+    // guard it would fall through to a blob read, and `globalThis.__SIGX_ASYNC__`
+    // in a long-lived Node process is shared across requests. Core's accessors
+    // gate on `isLiveClient()` themselves since 0.13 (#407), so this is belt and
+    // braces — and it is what keeps `hydrated` honest for the warning below.
     if (!isLiveClient()) {
+        // The no-instance case is the one that bites in practice: a store whose
+        // FIRST resolution happens outside component resolution — a router
+        // guard, or the createApp factory via `app.runWithContext` — has no
+        // instance to carry `ssr._ctx`, so the server branch above is skipped,
+        // nothing registers, and the client silently starts from defaults.
+        if (__DEV__ && !instance) {
+            console.warn(
+                `[@sigx/store] ssrState: "${ctx.storeName}" was first created outside component ` +
+                `resolution — its state will not transfer. Resolve the store inside a component ` +
+                `(and provide request state through DI for pre-render consumers such as guards).`
+            );
+        }
         return { hydrated: false };
     }
-    // Read from `window` to match the server's `window.__SIGX_ASYNC__=` emit;
-    // fall back to `globalThis` for windowless live clients and nonstandard
-    // setups where the two differ (in a real browser they're the same object).
-    // `window` is referenced only when it exists — a bare `window` read throws
-    // on windowless runtimes.
-    const scope: any = typeof window !== 'undefined' ? window : globalThis;
-    const blob = scope.__SIGX_ASYNC__ ?? (globalThis as any).__SIGX_ASYNC__;
-    if (blob && Object.prototype.hasOwnProperty.call(blob, key)) {
-        const seed = blob[key];
-        delete blob[key];
 
-        // Plain objects only — an array (or other exotic) seed would
-        // Object.assign numeric keys onto the state shape.
-        if (seed && typeof seed === 'object' && !Array.isArray(seed)) {
+    // `peekRestored` is THE decode point for the blob: it applies the type codec
+    // and, since core 0.13, handles live-client gating and windowless transports
+    // itself — no second reader of the global here.
+    const { hit, value: seed } = peekRestored(key);
+    if (hit) {
+        // Consume-once drops the entry on any hit, valid shape or not — an
+        // unusable seed is still this instance's, and leaving it would hand it
+        // to the next one. Shared scope never drops: the entry belongs to the
+        // client runtime, for its lifetime.
+        if (scope === 'instance') invalidateRestored(key);
+
+        // Plain records only — a transferred slice is always a plain snapshot.
+        if (isPlainSeed(seed)) {
             // ALWAYS filter to the slice's known keys (∩ pick): a tampered
             // blob must not assign unexpected keys onto the reactive state.
             // Reserved keys are excluded from the allow-list itself, so even
@@ -172,7 +303,10 @@ export function ssrState<TState extends object>(
                     .filter(k => Object.prototype.hasOwnProperty.call(seed, k))
                     .map(k => [k, (seed as Record<string, unknown>)[k]])
             ) as Partial<TState>;
-            slice.patch(filtered);
+            // Copy AFTER filtering — only the values that actually reach the
+            // state are worth cloning. Consumed entries need no copy: nothing
+            // else can reach them once they are out of the blob.
+            slice.patch(scope === 'shared' ? copySeed(filtered, ctx.storeName) : filtered);
             return { hydrated: true };
         }
     }

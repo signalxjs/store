@@ -12,7 +12,7 @@
  * sides of the gate and the windowless-safe blob read (globalThis fallback).
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { declareLiveClient } from '@sigx/runtime-core/internals';
 import { defineStore } from '../src/store';
 import { ssrState } from '../src/ssr';
@@ -22,10 +22,10 @@ const nextName = () => `ssrLive_${++n}`;
 
 // Transient so each call builds a fresh instance that runs the client path
 // (ssrState called outside any render → server branch is skipped).
-function makeStore(name: string) {
+function makeStore(name: string, scope?: 'shared' | 'instance') {
     return defineStore(name, (ctx) => {
         const { state, signals, patch } = ctx.defineState({ items: [] as string[], total: 0 });
-        const handle = ssrState(ctx, { state, patch });
+        const handle = ssrState(ctx, { state, patch }, { scope });
         return { ...signals, $ssr: handle };
     }, 'transient');
 }
@@ -74,7 +74,48 @@ describe('ssrState — live-client gating', () => {
 
         expect(store.items).toEqual(['from-global']);
         expect(store.$ssr.hydrated).toBe(true);
-        // Consume-once still holds through the globalThis path.
+        // Shared scope: the entry survives through the globalThis path too.
+        expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(true);
+    });
+});
+
+/**
+ * The windowless bridge in ssr.ts: core's `peekRestored`/`invalidateRestored`
+ * gate on `typeof window`, so a declared-live runtime with no `window` (lynx's
+ * BG thread, the terminal renderer) misses them entirely. #58 says those
+ * runtimes must still seed. Both halves — read and consume — are exercised
+ * here with `window` actually removed, which the tests above cannot do (they
+ * run under happy-dom, where `peekRestored` handles the read).
+ */
+describe('ssrState — windowless live client', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('seeds from globalThis when there is no window at all', () => {
+        const name = nextName();
+        (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: ['no-window'], total: 4 } };
+
+        declareLiveClient(true);
+        vi.stubGlobal('window', undefined);
+
+        const store = makeStore(name)() as any;
+
+        expect(store.items).toEqual(['no-window']);
+        expect(store.$ssr.hydrated).toBe(true);
+        expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(true);
+    });
+
+    it("scope: 'instance' consumes the entry with no window present", () => {
+        const name = nextName();
+        (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: ['no-window'], total: 4 } };
+
+        declareLiveClient(true);
+        vi.stubGlobal('window', undefined);
+
+        const store = makeStore(name, 'instance')() as any;
+
+        expect(store.items).toEqual(['no-window']);
         expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(false);
     });
 });

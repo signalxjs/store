@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-23
+
 ### Changed (breaking)
 
 - **`ssrState()` no longer consumes the transfer entry** — the seed stays in the page blob, so every store instance created in the client runtime seeds from it, each with its own structural copy. `scope: 'instance'` restores the old consume-once behaviour for state that genuinely belongs to one instance (core's `docs/seams.md` names that shape for a pack seed which must not outlive its instance). Consume-once was the wrong default the moment a document could hold several instances of one store: under `@sigx/ssr-islands` each island root is its own client component tree, and under `@sigx/resume` each separately-upgraded boundary can be — so island #2 onward hydrated from defaults (in `@sigx/i18n`: the wrong language, plus a refetch of catalogs the server had already serialized into the blob that was just discarded — repaired downstream in signalxjs/i18n#14, a repair every pack with runtime-wide state would have had to copy). It was also a divergence: core documents the blob as *"the page's DATA CACHE for its lifetime"* and `useData`, `useStream` and `@sigx/cache` all read it without consuming — `@sigx/store` was the only consuming reader in sigx. Migration: pass `scope: 'instance'` to any `ssrState()` call whose state must not be shared by a second instance. (#70)

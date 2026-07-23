@@ -8,11 +8,12 @@
  * default browser check).
  *
  * `isLiveClient()` defaults to `typeof window !== 'undefined'`, so web/SSR
- * behavior is unchanged; a declaration overrides it. These tests drive both
- * sides of the gate and the windowless-safe blob read (globalThis fallback).
+ * behavior is unchanged; a declaration overrides it, in both directions. These
+ * tests drive both sides of the gate, and the windowless blob read that core's
+ * accessors handle since 0.13.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { declareLiveClient } from '@sigx/runtime-core/internals';
 import { defineStore } from '../src/store';
 import { ssrState } from '../src/ssr';
@@ -22,10 +23,10 @@ const nextName = () => `ssrLive_${++n}`;
 
 // Transient so each call builds a fresh instance that runs the client path
 // (ssrState called outside any render → server branch is skipped).
-function makeStore(name: string) {
+function makeStore(name: string, scope?: 'shared' | 'instance') {
     return defineStore(name, (ctx) => {
         const { state, signals, patch } = ctx.defineState({ items: [] as string[], total: 0 });
-        const handle = ssrState(ctx, { state, patch });
+        const handle = ssrState(ctx, { state, patch }, { scope });
         return { ...signals, $ssr: handle };
     }, 'transient');
 }
@@ -64,7 +65,7 @@ describe('ssrState — live-client gating', () => {
         expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(true);
     });
 
-    it('reads the blob from globalThis for a declared live client (windowless-safe fallback)', () => {
+    it('reads the blob from globalThis for a declared live client', () => {
         const name = nextName();
         // Blob only on globalThis (not window) — the windowless transport shape.
         (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: ['from-global'], total: 3 } };
@@ -74,7 +75,48 @@ describe('ssrState — live-client gating', () => {
 
         expect(store.items).toEqual(['from-global']);
         expect(store.$ssr.hydrated).toBe(true);
-        // Consume-once still holds through the globalThis path.
+        // Shared scope: the entry survives through the globalThis path too.
+        expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(true);
+    });
+});
+
+/**
+ * Windowless live clients — lynx's BG thread, the terminal renderer — must
+ * still seed (#58). Since core 0.13 (signalxjs/core#407) that is core's job:
+ * `peekRestored`/`invalidateRestored` gate on `isLiveClient()` and read
+ * `globalThis`, so `ssrState` needs no blob access of its own. These cases run
+ * with `window` actually removed — which the tests above cannot do — so they
+ * pin the contract store depends on rather than anything store implements.
+ */
+describe('ssrState — windowless live client', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('seeds from globalThis when there is no window at all', () => {
+        const name = nextName();
+        (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: ['no-window'], total: 4 } };
+
+        declareLiveClient(true);
+        vi.stubGlobal('window', undefined);
+
+        const store = makeStore(name)() as any;
+
+        expect(store.items).toEqual(['no-window']);
+        expect(store.$ssr.hydrated).toBe(true);
+        expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(true);
+    });
+
+    it("scope: 'instance' consumes the entry with no window present", () => {
+        const name = nextName();
+        (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: ['no-window'], total: 4 } };
+
+        declareLiveClient(true);
+        vi.stubGlobal('window', undefined);
+
+        const store = makeStore(name, 'instance')() as any;
+
+        expect(store.items).toEqual(['no-window']);
         expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(false);
     });
 });

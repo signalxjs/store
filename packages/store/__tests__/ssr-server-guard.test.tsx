@@ -56,6 +56,7 @@ describe('ssrState — server without a usable render context', () => {
     });
 
     it('outside component resolution (no instance, non-DOM) does not seed from the global blob', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const name = nextName();
         currentInstance.mockReturnValue(null); // not in a render → no ssr signal to detect
         (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: ['leak'] } };
@@ -72,6 +73,12 @@ describe('ssrState — server without a usable render context', () => {
         expect(store.$ssr.hydrated).toBe(false);                                  // did not seed
         expect(store.items).toEqual([]);                                          // defaults preserved
         expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(true); // blob untouched
+        // …and it says so (#63): silently starting from defaults is what made
+        // this cost a debugging session downstream (signalxjs/pulse#1).
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining(`"${name}" was first created outside component resolution`)
+        );
+        warn.mockRestore();
     });
 
     it('dev-warns that the on-server state cannot be serialized', () => {

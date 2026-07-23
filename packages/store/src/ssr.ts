@@ -107,16 +107,22 @@ function snapshot<TState extends object>(
  * patching it would report `hydrated: true` having applied nothing, and reading
  * through it could run getters or proxy traps.
  *
- * The `constructor === Object` arm is not redundant: a blob entry with a literal
- * `"__proto__"` key comes back with its PROTOTYPE swapped for that value, since
- * the codec rebuilds objects by assignment. That is still a plain record — and
- * `Object.prototype` itself is untouched — so it keeps hydrating, with the
- * own-property filter deciding what of it may land on the state.
+ * The check reads NO properties of the seed or its prototype — a seed is
+ * attacker-controlled data, and `proto.constructor` alone would be enough to
+ * fire a getter or a proxy trap. Prototype identity is all it looks at.
+ *
+ * A blob entry carrying a literal `"__proto__"` key therefore fails here: the
+ * codec rebuilds objects by assignment, so such an entry comes back with its
+ * prototype SWAPPED for that value and is rejected wholesale rather than
+ * part-applied. Nothing legitimate produces that shape — `snapshot()` skips
+ * reserved keys on the way out — so the only producer is a tampered blob, and
+ * ignoring it entirely is the safer read. `Object.prototype` is never touched
+ * either way.
  */
 function isPlainSeed(seed: unknown): seed is Record<string, unknown> {
     if (!seed || typeof seed !== 'object' || Array.isArray(seed)) return false;
     const proto = Object.getPrototypeOf(seed);
-    return proto === null || proto === Object.prototype || proto.constructor === Object;
+    return proto === null || proto === Object.prototype;
 }
 
 /**

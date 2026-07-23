@@ -269,7 +269,19 @@ describe('ssrState — client seeding', () => {
         expect(cart.$ssr.hydrated).toBe(false);
     });
 
-    it('drops unknown/tampered keys from the seed (incl. __proto__-style)', () => {
+    it('drops unknown keys from the seed', () => {
+        const name = nextName();
+        (globalThis as any).__SIGX_ASYNC__ = {
+            [`store:${name}`]: { items: ['ok'], injected: 'nope' }
+        };
+
+        const cart = makeCartStore(name)() as any;
+        expect(cart.items).toEqual(['ok']);
+        expect(cart.injected).toBeUndefined();
+        expect(cart.$ssr.hydrated).toBe(true);
+    });
+
+    it('rejects a __proto__-tampered seed outright', () => {
         const name = nextName();
         (globalThis as any).__SIGX_ASYNC__ = {
             [`store:${name}`]: JSON.parse(
@@ -278,10 +290,14 @@ describe('ssrState — client seeding', () => {
         };
 
         const cart = makeCartStore(name)() as any;
-        expect(cart.items).toEqual(['ok']);
+
+        // The codec rebuilds by assignment, so this entry arrives with its own
+        // prototype swapped — a shape nothing legitimate produces. Take none of
+        // it rather than the plausible-looking half.
+        expect(cart.items).toEqual([]);
         expect(cart.injected).toBeUndefined();
+        expect(cart.$ssr.hydrated).toBe(false);
         expect(({} as any).polluted).toBeUndefined(); // Object.prototype untouched
-        expect(cart.$ssr.hydrated).toBe(true);
     });
 
     it('ignores a non-plain-object seed instead of reporting a no-op hydration', () => {
@@ -327,9 +343,32 @@ describe('ssrState — reserved keys', () => {
         const useCart = makeCartStore(name, { pick: ['items', '__proto__'] as any });
         const cart = useCart() as any;
 
-        expect(cart.items).toEqual(['ok']);
+        // Naming a reserved key in `pick` buys nothing: the seed is rejected on
+        // shape before the allow-list is consulted, and the allow-list excludes
+        // reserved keys anyway.
+        expect(cart.items).toEqual([]);
         expect(({} as any).polluted).toBeUndefined();
-        expect(cart.$ssr.hydrated).toBe(true);
+        expect(cart.$ssr.hydrated).toBe(false);
+    });
+
+    it('a caller-supplied pick cannot smuggle reserved keys into the SERVER snapshot', async () => {
+        const name = nextName();
+        // `pick` feeds snapshot() directly on the server, so the reserved-key
+        // guard there is load-bearing in its own right.
+        const useCart = makeCartStore(name, { pick: ['items', '__proto__'] as any });
+
+        const Page = component(() => {
+            const cart = useCart();
+            cart.addItem('pen', 3);
+            return () => <div>x</div>;
+        }, { name: 'Page' });
+
+        const ssr = createSSR({ plugins: [stateSerializationPlugin()] });
+        const html = await ssr.render((Page as any)({}));
+
+        expect(html).toContain('"items":["pen"]');
+        expect(html).not.toContain('__proto__');
+        expect(({} as any).polluted).toBeUndefined();
     });
 });
 

@@ -8,8 +8,9 @@
  * default browser check).
  *
  * `isLiveClient()` defaults to `typeof window !== 'undefined'`, so web/SSR
- * behavior is unchanged; a declaration overrides it. These tests drive both
- * sides of the gate and the windowless-safe blob read (globalThis fallback).
+ * behavior is unchanged; a declaration overrides it, in both directions. These
+ * tests drive both sides of the gate, and the windowless blob read that core's
+ * accessors handle since 0.13.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -64,7 +65,7 @@ describe('ssrState — live-client gating', () => {
         expect(`store:${name}` in (globalThis as any).__SIGX_ASYNC__).toBe(true);
     });
 
-    it('reads the blob from globalThis for a declared live client (windowless-safe fallback)', () => {
+    it('reads the blob from globalThis for a declared live client', () => {
         const name = nextName();
         // Blob only on globalThis (not window) — the windowless transport shape.
         (globalThis as any).__SIGX_ASYNC__ = { [`store:${name}`]: { items: ['from-global'], total: 3 } };
@@ -80,12 +81,12 @@ describe('ssrState — live-client gating', () => {
 });
 
 /**
- * The windowless bridge in ssr.ts: core's `peekRestored`/`invalidateRestored`
- * gate on `typeof window`, so a declared-live runtime with no `window` (lynx's
- * BG thread, the terminal renderer) misses them entirely. #58 says those
- * runtimes must still seed. Both halves — read and consume — are exercised
- * here with `window` actually removed, which the tests above cannot do (they
- * run under happy-dom, where `peekRestored` handles the read).
+ * Windowless live clients — lynx's BG thread, the terminal renderer — must
+ * still seed (#58). Since core 0.13 (signalxjs/core#407) that is core's job:
+ * `peekRestored`/`invalidateRestored` gate on `isLiveClient()` and read
+ * `globalThis`, so `ssrState` needs no blob access of its own. These cases run
+ * with `window` actually removed — which the tests above cannot do — so they
+ * pin the contract store depends on rather than anything store implements.
  */
 describe('ssrState — windowless live client', () => {
     afterEach(() => {

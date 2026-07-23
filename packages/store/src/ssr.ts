@@ -89,12 +89,15 @@ export function ssrState<TState extends object>(
     const instance = getCurrentInstance() as any;
     const renderCtx = instance?.ssr?.isServer ? instance.ssr._ctx : null;
 
-    // Duck-typed boundary: tolerate render contexts without the expected
-    // Map-like _asyncResults (older/alternative SSR runtimes) instead of
-    // throwing inside a store setup.
-    const results = renderCtx?._asyncResults;
-    if (results && typeof results.set === 'function') {
-        if (__DEV__ && typeof results.has === 'function' && results.has(key)) {
+    // Duck-typed boundary: tolerate render contexts without the public
+    // `registerSerializedState` write path (older/alternative SSR runtimes)
+    // instead of throwing inside a store setup.
+    if (renderCtx && typeof renderCtx.registerSerializedState === 'function') {
+        if (
+            __DEV__ &&
+            typeof renderCtx._asyncResults?.has === 'function' &&
+            renderCtx._asyncResults.has(key)
+        ) {
             console.warn(
                 `[@sigx/store] ssrState: "${ctx.storeName}" registered twice in one request — ` +
                 `the serialized state would be last-write-wins. One store ` +
@@ -103,8 +106,12 @@ export function ssrState<TState extends object>(
         }
         // LIVE registration: toJSON defers the snapshot to emit time (the
         // serializer stringifies after the shell render), so state mutated
-        // during the request serializes with its final values.
-        results.set(key, {
+        // during the request serializes with its final values. The public
+        // `registerSerializedState` (@sigx/server-renderer #407) writes
+        // `_asyncResults` AND marks the key in `_unflushedAsyncKeys`, so the
+        // `stateSerializationPlugin` drain actually emits it — a bare
+        // `_asyncResults.set()` is silently dropped from the blob.
+        renderCtx.registerSerializedState(key, {
             toJSON: () => snapshot(slice.state, options.pick)
         });
         return { hydrated: false };

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Migrated to sigx core **`0.13.0`**: the `catalog:` pins for `@sigx/reactivity`/`@sigx/runtime-core`/`@sigx/server-renderer`/`@sigx/vite`/`sigx` move from `^0.12.0` to `^0.13.0`. Verified with typecheck, tests and build against 0.13.0.
+- `ssrState()` now registers its live slice through the server renderer's public `ctx.registerSerializedState(key, value)` write path (`@sigx/server-renderer` #407) instead of a bare `_asyncResults.set()`. In core 0.13 the `stateSerializationPlugin` only emits keys marked in `_unflushedAsyncKeys`, which `registerSerializedState` sets and a direct `_asyncResults.set()` does not — without this migration a store's SSR state was silently dropped from the `window.__SIGX_ASYNC__` blob. The public API (`ssrState`) and its `store:<name>` transfer contract are unchanged; this restores server→client state transfer against core 0.13. The duck-typed boundary now gates on `registerSerializedState` rather than a Map-like `_asyncResults`.
+
 ## [0.9.0] - 2026-07-18
 
 ### Changed (breaking)

@@ -47,7 +47,7 @@ describe('ssrState — server serialization', () => {
             return () => <div class="cart">{(cart as any).items.length}</div>;
         }, { name: 'Page' });
 
-        const ssr = createSSR().use(stateSerializationPlugin());
+        const ssr = createSSR({ plugins: [stateSerializationPlugin()] });
         const html = await ssr.render((Page as any)({}));
 
         expect(html).toContain('<div class="cart">1</div>');
@@ -66,7 +66,7 @@ describe('ssrState — server serialization', () => {
             return () => <div>x</div>;
         }, { name: 'Page' });
 
-        const ssr = createSSR().use(stateSerializationPlugin());
+        const ssr = createSSR({ plugins: [stateSerializationPlugin()] });
         const html = await ssr.render((Page as any)({}));
 
         expect(html).toContain(`"store:${name}"`);
@@ -84,7 +84,7 @@ describe('ssrState — server serialization', () => {
         const B = component(() => { useCart(); return () => <i>b</i>; }, { name: 'B' });
         const Page = component(() => () => <div>{(A as any)({})}{(B as any)({})}</div>, { name: 'Page' });
 
-        const ssr = createSSR().use(stateSerializationPlugin());
+        const ssr = createSSR({ plugins: [stateSerializationPlugin()] });
         await ssr.render((Page as any)({}));
 
         expect(warn).toHaveBeenCalledWith(expect.stringContaining(`ssrState: "${name}" registered twice`));
@@ -224,7 +224,7 @@ describe('ssrState — full round trip', () => {
             return () => <div>{(cart as any).total}</div>;
         }, { name: 'Page' });
 
-        const ssr = createSSR().use(stateSerializationPlugin());
+        const ssr = createSSR({ plugins: [stateSerializationPlugin()] });
         const html = await ssr.render((Page as any)({}));
 
         // "Execute" the blob script the way a browser would

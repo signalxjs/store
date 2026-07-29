@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-29
+
+### Changed
+
+- Migrated to sigx core **`0.14.0`**: the `catalog:` pins for `@sigx/reactivity`/`@sigx/runtime-core`/`@sigx/server-renderer`/`@sigx/vite`/`sigx` move from `^0.13.0` to `^0.14.0`, which narrows the published peer range to that single minor. No source change was needed — `verify:catalog`, `build`, `typecheck` and `test` (150 tests) all passed against 0.14.0 on the first run. (#81)
+
+  Core 0.14 is worth reading before upgrading: it makes a reactive object's **key set** a dependency (enumeration via `Object.keys()`/`for…in`/spread/rest now re-runs a reader when a key appears or disappears), so an effect that enumerates reactive state can re-run in cases where it previously did not, and it turns host attributes on a component into an opt-in (`& Define.Attrs`). Neither affects `@sigx/store`'s own surface. See signalxjs/core's `CHANGELOG.md` for 0.14.0.
+
 ## [0.11.0] - 2026-07-23
 
 ### Changed (breaking)

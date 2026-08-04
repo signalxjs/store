@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Migrated to sigx core **`0.15.0`**: the `catalog:` pins for `@sigx/reactivity`/`@sigx/runtime-core`/`@sigx/server-renderer`/`@sigx/vite`/`sigx` move from `^0.14.0` to `^0.15.0`, which narrows the published peer range to that single minor. (#83)
+- **`ssrState()` and a `__proto__`-tampered blob entry**: under core ≤0.14 such an entry arrived from the codec with its prototype swapped and was rejected *wholesale* — no keys applied, `hydrated: false`. Core 0.15's codec (signalxjs/core#592) now drops an own `"__proto__"` key during revive, so the entry arrives sanitized and its remaining legitimate keys **are applied** (`hydrated: true`). `Object.prototype` was never touched on either path, the reserved-key allow-list (`__proto__`/`constructor`/`prototype`) still applies, and no legitimate producer emits that shape — this only changes what an attacker-shaped blob observes. If you relied on wholesale rejection as a tamper signal, that signal is gone: core now sanitizes instead of poisoning the shape. (#83)
+
 ## [0.12.0] - 2026-07-29
 
 ### Changed

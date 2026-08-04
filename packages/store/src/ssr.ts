@@ -111,13 +111,14 @@ function snapshot<TState extends object>(
  * attacker-controlled data, and `proto.constructor` alone would be enough to
  * fire a getter or a proxy trap. Prototype identity is all it looks at.
  *
- * A blob entry carrying a literal `"__proto__"` key therefore fails here: the
- * codec rebuilds objects by assignment, so such an entry comes back with its
- * prototype SWAPPED for that value and is rejected wholesale rather than
- * part-applied. Nothing legitimate produces that shape — `snapshot()` skips
- * reserved keys on the way out — so the only producer is a tampered blob, and
- * ignoring it entirely is the safer read. `Object.prototype` is never touched
- * either way.
+ * Since core 0.15 (signalxjs/core#592) the codec guards `__proto__` itself:
+ * revive DROPS an own `"__proto__"` key instead of rebuilding it by assignment
+ * (which used to swap the revived object's prototype — the shape this check
+ * rejected wholesale under core ≤0.14). A tampered blob entry therefore
+ * arrives here already sanitized and plain; this check remains as
+ * defense-in-depth against exotic shapes, and the reserved-key allow-list
+ * below still excludes `__proto__`/`constructor`/`prototype` regardless.
+ * `Object.prototype` is never touched on any path.
  */
 function isPlainSeed(seed: unknown): seed is Record<string, unknown> {
     if (!seed || typeof seed !== 'object' || Array.isArray(seed)) return false;

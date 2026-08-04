@@ -297,7 +297,7 @@ describe('ssrState — client seeding', () => {
         expect(cart.$ssr.hydrated).toBe(true);
     });
 
-    it('rejects a __proto__-tampered seed outright', () => {
+    it('a __proto__-tampered seed is sanitized by the codec: the key is dropped, the rest applies', () => {
         const name = nextName();
         (globalThis as any).__SIGX_ASYNC__ = {
             [`store:${name}`]: JSON.parse(
@@ -307,13 +307,18 @@ describe('ssrState — client seeding', () => {
 
         const cart = makeCartStore(name)() as any;
 
-        // The codec rebuilds by assignment, so this entry arrives with its own
-        // prototype swapped — a shape nothing legitimate produces. Take none of
-        // it rather than the plausible-looking half.
-        expect(cart.items).toEqual([]);
+        // Since core 0.15 (signalxjs/core#592) revive DROPS an own "__proto__"
+        // key at the codec instead of rebuilding it by assignment — which used
+        // to swap the revived object's prototype, the shape `isPlainSeed`
+        // rejected wholesale under core ≤0.14. The seed now arrives as a plain
+        // record with the dangerous key already gone, so the remaining keys go
+        // through the slice allow-list as usual. Object.prototype is untouched
+        // on every path.
+        expect(cart.items).toEqual(['ok']);
         expect(cart.injected).toBeUndefined();
-        expect(cart.$ssr.hydrated).toBe(false);
+        expect(cart.$ssr.hydrated).toBe(true);
         expect(({} as any).polluted).toBeUndefined(); // Object.prototype untouched
+        expect((cart as any).polluted).toBeUndefined(); // …and so is the state's
     });
 
     it('ignores a non-plain-object seed instead of reporting a no-op hydration', () => {
@@ -359,12 +364,13 @@ describe('ssrState — reserved keys', () => {
         const useCart = makeCartStore(name, { pick: ['items', '__proto__'] as any });
         const cart = useCart() as any;
 
-        // Naming a reserved key in `pick` buys nothing: the seed is rejected on
-        // shape before the allow-list is consulted, and the allow-list excludes
-        // reserved keys anyway.
-        expect(cart.items).toEqual([]);
+        // Naming a reserved key in `pick` buys nothing: the codec drops an own
+        // "__proto__" key during revive (core 0.15, signalxjs/core#592), and
+        // the allow-list excludes reserved keys anyway — so only the
+        // legitimate picked keys reach patch().
+        expect(cart.items).toEqual(['ok']);
         expect(({} as any).polluted).toBeUndefined();
-        expect(cart.$ssr.hydrated).toBe(false);
+        expect(cart.$ssr.hydrated).toBe(true);
     });
 
     it('a caller-supplied pick cannot smuggle reserved keys into the SERVER snapshot', async () => {

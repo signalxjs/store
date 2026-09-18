@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-18
+
+### Changed
+
+- Migrated to sigx core **`1.0.0`**: the `catalog:` pins for `@sigx/reactivity`/`@sigx/runtime-core`/`@sigx/server-renderer`/`@sigx/vite`/`sigx` move from `^0.15.0` to `^1.0.0`, so the published `peerDependencies` on `@sigx/reactivity`/`@sigx/runtime-core` are now `^1.0.0`. Unlike every previous alignment this is a *wide* range, on purpose: from 1.0 core promises additive minors and the single-copy guarantee belongs to the app — whichever 1.x the app installs is the one copy every library's `^1.0.0` peer resolves to (core's `docs/ecosystem-release.md` §1, rfc-1.0 §3). Apps must be on core 1.x to take this release; 0.15.x apps stay on `@sigx/store` 0.13.x. No source change was needed — `verify:catalog`, `build`, `typecheck` and `test` (150 tests) all passed against 1.0.0 on the first run. (#89)
+
 ## [0.13.0] - 2026-08-04
 
 ### Changed
